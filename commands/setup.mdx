@@ -1,0 +1,219 @@
+---
+title: "life-hunter setup"
+description: "Configure your profile with skills, interests, and data sources"
+---
+
+The `setup` command guides you through an interactive profile configuration process. Your profile tells the AI agents what opportunities to look for and how to score them.
+
+## Command Syntax
+
+```bash
+life-hunter setup
+```
+
+No flags or options — the command is fully interactive.
+
+## What It Does
+
+When you run `life-hunter setup`, the CLI will:
+
+<Steps>
+  <Step title="Display Setup Header">
+    Shows a branded header with instructions:
+    ```
+    🧬 Profile Setup
+    ─────────────────────────────────────────
+    Configure your profile so the AI agents know what to hunt for.
+    ```
+  </Step>
+
+  <Step title="Collect Profile Information">
+    Prompts you for six pieces of information using interactive input fields
+  </Step>
+
+  <Step title="Save to Convex">
+    Persists your profile to the Convex database with a unique profile ID
+  </Step>
+
+  <Step title="Confirm & Show Next Steps">
+    Displays your saved profile and suggests running `life-hunter hunt`
+  </Step>
+</Steps>
+
+## Interactive Prompts
+
+The setup wizard asks for the following information:
+
+### 1. Your Name
+
+```
+Your name:
+```
+
+- **Type:** Text input
+- **Validation:** Required (non-empty string)
+- **Example:** `John Doe`
+
+### 2. Email Address
+
+```
+Email address:
+```
+
+- **Type:** Text input
+- **Validation:** Must match email regex `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`
+- **Example:** `john@example.com`
+- **Used for:** Daily digest emails
+
+### 3. Skills
+
+```
+Your skills (comma-separated):
+```
+
+- **Type:** Text input with comma separation
+- **Default:** `TypeScript, React, Node.js, Python`
+- **Processing:** Split by comma, trimmed, empty values filtered
+- **Example:** `TypeScript, React, Node.js, Python, Docker`
+
+### 4. Interests
+
+```
+Your interests (comma-separated):
+```
+
+- **Type:** Text input with comma separation
+- **Default:** `AI, startups, open source, web3`
+- **Processing:** Split by comma, trimmed, empty values filtered
+- **Example:** `AI, machine learning, blockchain, SaaS`
+
+### 5. Data Sources
+
+```
+Select sources to hunt:
+```
+
+- **Type:** Checkbox list (multi-select)
+- **Options:**
+  - Hacker News (checked by default)
+  - Product Hunt (checked by default)
+  - Reddit (checked by default)
+  - Craigslist (checked by default)
+- **Validation:** Must select at least one source
+- **Use arrow keys + space** to toggle selections
+
+### 6. Score Threshold
+
+```
+Min AI match score (0-100):
+```
+
+- **Type:** Number input
+- **Default:** `40`
+- **Validation:** Must be between 0 and 100 (inclusive)
+- **Purpose:** Only opportunities scoring above this threshold will be saved
+
+## Example Session
+
+```bash
+$ life-hunter setup
+
+  🧬 Profile Setup
+  ─────────────────────────────────────────
+  Configure your profile so the AI agents know what to hunt for.
+
+? Your name: Sarah Chen
+? Email address: sarah.chen@example.com
+? Your skills (comma-separated): Python, Machine Learning, FastAPI, Docker
+? Your interests (comma-separated): AI, data science, biotech, climate tech
+? Select sources to hunt: (Press <space> to select)
+  ◉ Hacker News
+  ◉ Product Hunt
+  ◉ Reddit
+  ◯ Craigslist
+? Min AI match score (0-100): 50
+
+⠹ Saving profile to Convex...
+✔ Profile saved! ID: kg2h7v8w9x...
+ℹ Skills: Python, Machine Learning, FastAPI, Docker
+ℹ Interests: AI, data science, biotech, climate tech
+ℹ Sources: Hacker News, Product Hunt, Reddit
+ℹ Threshold: 50
+
+  Run life-hunter hunt to start finding opportunities!
+```
+
+## Profile Storage
+
+Profiles are saved to Convex using the `api.profiles.create` mutation:
+
+```typescript
+const profileId = await client.mutation(api.profiles.create, {
+  name: answers.name,
+  email: answers.email,
+  skills: answers.skills,
+  interests: answers.interests,
+  sources: answers.sources,
+  scoreThreshold: answers.scoreThreshold,
+});
+```
+
+Each profile receives a unique ID (e.g., `kg2h7v8w9x...`) that's used by other commands.
+
+## Multiple Profiles
+
+You can create multiple profiles with different configurations. When running `hunt` or `daily`, you'll be prompted to select which profile to use if more than one exists.
+
+**Use cases for multiple profiles:**
+- Different skill sets (frontend vs. backend)
+- Different interests (side projects vs. freelance work)
+- Different thresholds (strict vs. exploratory)
+- Team members sharing the same Convex deployment
+
+## Profile Already Exists
+
+If you run `setup` multiple times, it will create additional profiles rather than overwriting. There's no "profile already exists" check — each run creates a new profile record.
+
+To manage existing profiles, you'd need to use the Convex dashboard or implement a profile management command.
+
+## Validation Rules
+
+| Field | Rule | Error Message |
+|-------|------|---------------|
+| Name | Non-empty string | "Name is required" |
+| Email | Valid email format | "Enter a valid email" |
+| Skills | Array (auto-parsed) | N/A |
+| Interests | Array (auto-parsed) | N/A |
+| Sources | At least one selected | "Select at least one source" |
+| Score Threshold | 0-100 inclusive | "Must be between 0 and 100" |
+
+## Error Handling
+
+If the profile save fails (e.g., Convex connection issues):
+
+```
+⠹ Saving profile to Convex...
+✖ Failed to save profile: Error: Connection refused
+```
+
+The command exits with code 1. Check:
+- `CONVEX_URL` is set in `.env`
+- Convex deployment is running
+- Network connectivity
+
+## Next Steps
+
+After setting up your profile:
+
+1. Run `life-hunter hunt` to start scraping and matching opportunities
+2. Configure SMTP settings in `.env` to enable email digests
+3. Schedule `life-hunter daily` as a cron job for automated digests
+
+## Related Commands
+
+- [life-hunter hunt](/commands/hunt) — Deploy AI agents to scrape and match opportunities
+- [life-hunter daily](/commands/daily) — View and email today's digest
+
+## Source Code Reference
+
+Implemented in `src/commands/setup.ts:19-115`

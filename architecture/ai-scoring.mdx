@@ -1,0 +1,454 @@
+---
+title: 'AI Scoring System'
+description: 'OpenAI GPT-4o-mini integration for intelligent opportunity matching'
+icon: 'brain'
+---
+
+## Overview
+
+The AI scoring system analyzes scraped items against your profile to determine relevance. It uses OpenAI's GPT-4o-mini model to provide:
+
+- **Match Score** (0-100): How well the item aligns with your skills and interests
+- **Type Classification**: job, deal, or research
+- **One-Sentence Summary**: AI-generated description of why it's relevant
+
+<Note>
+If no OpenAI API key is provided, the system falls back to keyword-based scoring, ensuring the CLI remains functional for all users.
+</Note>
+
+## How AI Scoring Works
+
+### Scoring Flow
+
+<Steps>
+  <Step title="Load User Profile">
+    The scorer fetches the user's profile from Convex:
+    ```typescript
+    const profile = await ctx.runQuery(api.profiles.get, { id: profileId });
+    const threshold = profile.scoreThreshold ?? 40;
+    ```
+  </Step>
+
+  <Step title="Construct Prompt">
+    For each item, a structured prompt is built:
+    - Item metadata (title, source, content)
+    - User skills and interests
+    - JSON response format specification
+  </Step>
+
+  <Step title="Call OpenAI API">
+    The prompt is sent to GPT-4o-mini with JSON mode enabled:
+    ```typescript
+    const completion = await openai.chat.completions.create({
+      messages: [{ role: "user", content: prompt }],
+      model: "gpt-4o-mini",
+      response_format: { type: "json_object" },
+      max_tokens: 150,
+    });
+    ```
+  </Step>
+
+  <Step title="Parse Response">
+    The AI returns structured JSON:
+    ```json
+    {
+      "score": 85,
+      "type": "job",
+      "summary": "Senior TypeScript role at AI startup, perfect for React + ML interests"
+    }
+    ```
+  </Step>
+
+  <Step title="Filter & Store">
+    Items scoring above the threshold are saved to Convex:
+    ```typescript
+    if (result.score >= threshold) {
+      await ctx.runMutation(api.items.upsertItem, {
+        profileId,
+        type: result.type,
+        score: result.score,
+        aiSummary: result.summary,
+        // ... other fields
+      });
+    }
+    ```
+  </Step>
+</Steps>
+
+## Scoring Prompt Structure
+
+The actual prompt sent to OpenAI (from `convex/agents.ts:333-345`):
+
+<CodeGroup>
+```typescript Scoring Prompt
+const prompt = `You are an AI career/opportunity matcher. Score this item's relevance to the user.
+
+ITEM:
+  Title: ${item.title}
+  Source: ${item.source}
+  Content: ${item.content || "(none)"}
+
+USER PROFILE:
+  Skills: ${profile.skills.join(", ")}
+  Interests: ${profile.interests.join(", ")}
+
+Respond ONLY with valid JSON:
+{"score": <0-100>, "type": "job" | "deal" | "research", "summary": "<1 sentence>"}`;
+```
+</CodeGroup>
+
+### Prompt Design Rationale
+
+| Element | Purpose |
+|:--------|:--------|
+| **System role** | Sets context as a "career/opportunity matcher" |
+| **Item details** | Provides title, source, and content excerpt |
+| **Profile context** | Lists user skills and interests for comparison |
+| **JSON format** | Enforces structured, parseable responses |
+| **One-sentence summary** | Keeps output concise (max_tokens: 150) |
+
+<Warning>
+Do NOT include user email or name in the prompt. Only include skills and interests to minimize PII sent to OpenAI.
+</Warning>
+
+## Response Format
+
+GPT-4o-mini returns JSON with three fields:
+
+### `score` (number)
+
+0-100 relevance score:
+- **90-100**: Perfect match (rare, requires exact skill/interest overlap)
+- **70-89**: Strong match (multiple skills or key interest)
+- **50-69**: Moderate match (some skills or tangential interest)
+- **30-49**: Weak match (generic relevance)
+- **0-29**: Poor match (included for context, usually filtered)
+
+### `type` (string)
+
+One of three categories:
+
+| Type | Examples |
+|:-----|:---------|
+| `job` | Job listings, hiring posts, freelance gigs |
+| `deal` | Product launches, discounts, tools |
+| `research` | Blog posts, papers, tutorials, discussions |
+
+<Note>
+The AI infers type from content context. A "Who's Hiring" thread is classified as `job`, while a Show HN post becomes `deal` or `research`.
+</Note>
+
+### `summary` (string)
+
+One-sentence explanation of relevance:
+- **Good**: "Full-stack TypeScript role at fintech startup, matches React + crypto interests"
+- **Avoid**: "This is a job posting" (too vague)
+- **Avoid**: "The company is looking for someone with skills in..." (redundant)
+
+## Implementation
+
+Full `scoreItems` action from `convex/agents.ts`:
+
+<CodeGroup>
+```typescript convex/agents.ts (lines 296-402)
+export const scoreItems = action({
+  args: {
+    profileId: v.id("profiles"),
+    rawItems: v.array(
+      v.object({
+        title: v.string(),
+        url: v.string(),
+        content: v.optional(v.string()),
+        source: v.string(),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    // 1. Load the profile
+    const profile = await ctx.runQuery(api.profiles.get, { id: args.profileId });
+    if (!profile) throw new Error("Profile not found");
+
+    const threshold = profile.scoreThreshold ?? 40;
+    let matched = 0;
+
+    // 2. Score each item
+    for (const item of args.rawItems) {
+      try {
+        let result = {
+          score: 0,
+          type: "research" as "job" | "deal" | "research",
+          summary: "",
+        };
+
+        // Try OpenAI scoring
+        const apiKey = process.env.OPENAI_API_KEY;
+
+        if (apiKey) {
+          const { default: OpenAI } = await import("openai");
+          const openai = new OpenAI({ apiKey });
+
+          const prompt = `You are an AI career/opportunity matcher. Score this item's relevance to the user.
+
+ITEM:
+  Title: ${item.title}
+  Source: ${item.source}
+  Content: ${item.content || "(none)"}
+
+USER PROFILE:
+  Skills: ${profile.skills.join(", ")}
+  Interests: ${profile.interests.join(", ")}
+
+Respond ONLY with valid JSON:
+{"score": <0-100>, "type": "job" | "deal" | "research", "summary": "<1 sentence>"}`;
+
+          const completion = await openai.chat.completions.create({
+            messages: [{ role: "user", content: prompt }],
+            model: "gpt-4o-mini",
+            response_format: { type: "json_object" },
+            max_tokens: 150,
+          });
+
+          const content = completion.choices[0]?.message?.content;
+          if (content) {
+            result = JSON.parse(content);
+          }
+        } else {
+          // Fallback: keyword-based scoring
+          const text = `${item.title} ${item.content || ""}`.toLowerCase();
+          let keywordScore = 0;
+          const allTerms = [...profile.skills, ...profile.interests];
+
+          for (const term of allTerms) {
+            if (text.includes(term.toLowerCase())) {
+              keywordScore += 100 / allTerms.length;
+            }
+          }
+
+          result = {
+            score: Math.min(Math.round(keywordScore), 100),
+            type: text.includes("hire") || text.includes("job")
+              ? "job"
+              : text.includes("deal") || text.includes("sale")
+                ? "deal"
+                : "research",
+            summary: `Keyword match: ${Math.round(keywordScore)}% relevance`,
+          };
+        }
+
+        // 3. Insert if above threshold
+        if (result.score >= threshold) {
+          await ctx.runMutation(api.items.upsertItem, {
+            profileId: args.profileId,
+            type: result.type,
+            source: item.source,
+            title: item.title,
+            url: item.url,
+            content: item.content,
+            aiSummary: result.summary,
+            score: result.score,
+          });
+          matched++;
+        }
+      } catch (err) {
+        console.error(`[AI Scorer] Error scoring "${item.title}":`, err);
+      }
+    }
+
+    return { scored: args.rawItems.length, matched };
+  },
+});
+```
+</CodeGroup>
+
+## Batching Strategy
+
+Items are scored in batches of 20 to optimize API usage:
+
+```typescript
+const batchSize = 20;
+for (let i = 0; i < uniqueItems.length; i += batchSize) {
+  const batch = uniqueItems.slice(i, i + batchSize);
+  const scoreResult = await ctx.runAction(api.agents.scoreItems, {
+    profileId,
+    rawItems: batch,
+  });
+  totalMatched += scoreResult.matched;
+}
+```
+
+### Why Batch Size 20?
+
+1. **Convex action timeout**: Actions have a 10-minute limit
+2. **API rate limits**: OpenAI free tier allows 3 requests/min (60 items/min total)
+3. **User experience**: Batches complete quickly, providing incremental progress
+4. **Error isolation**: If one batch fails, others continue
+
+<Note>
+At ~2 seconds per item, a batch of 20 takes ~40 seconds. This is fast enough for real-time CLI feedback.
+</Note>
+
+## Keyword Fallback
+
+When `OPENAI_API_KEY` is not set, the system uses a simple keyword matcher:
+
+<CodeGroup>
+```typescript Keyword Fallback Logic
+const text = `${item.title} ${item.content || ""}`.toLowerCase();
+let keywordScore = 0;
+const allTerms = [...profile.skills, ...profile.interests];
+
+for (const term of allTerms) {
+  if (text.includes(term.toLowerCase())) {
+    keywordScore += 100 / allTerms.length;
+  }
+}
+
+const result = {
+  score: Math.min(Math.round(keywordScore), 100),
+  type: text.includes("hire") || text.includes("job")
+    ? "job"
+    : text.includes("deal") || text.includes("sale")
+      ? "deal"
+      : "research",
+  summary: `Keyword match: ${Math.round(keywordScore)}% relevance`,
+};
+```
+</CodeGroup>
+
+### How It Works
+
+1. **Combine text**: Concatenate title + content
+2. **Term matching**: Check if each skill/interest appears in text
+3. **Score calculation**: Each match contributes `100 / totalTerms` points
+4. **Type inference**: Use simple keyword rules ("hire" → job, "deal" → deal, else research)
+
+**Example:**
+Profile with 5 skills: `["TypeScript", "React", "Node.js", "Python", "Docker"]`
+
+Item: "Senior TypeScript/React Developer"
+- Matches: TypeScript (20 points), React (20 points)
+- Score: 40
+- Type: "job" (contains implicit hiring context)
+
+<Warning>
+Keyword matching is less accurate than AI scoring. It cannot:
+- Understand synonyms ("JavaScript" vs "JS")
+- Detect context ("React" the framework vs "react" the verb)
+- Assess content quality or relevance depth
+</Warning>
+
+## Score Threshold Filtering
+
+Only items above the user's `scoreThreshold` are stored:
+
+```typescript
+if (result.score >= threshold) {
+  await ctx.runMutation(api.items.upsertItem, { /* ... */ });
+  matched++;
+}
+```
+
+**Default threshold**: 40 (set during `life-hunter setup`)
+
+<Tip>
+Lower thresholds (e.g., 20) show more results but include marginal matches. Higher thresholds (e.g., 60) are more selective but may miss interesting opportunities.
+</Tip>
+
+## Cost Analysis
+
+### OpenAI Pricing (GPT-4o-mini)
+
+| Metric | Cost |
+|:-------|:-----|
+| Input tokens | $0.150 per 1M tokens |
+| Output tokens | $0.600 per 1M tokens |
+
+**Average usage per item:**
+- Input: ~200 tokens (prompt + item content)
+- Output: ~50 tokens (JSON response)
+- Cost per item: ~$0.00004 (0.004 cents)
+
+**Example hunt:**
+- 100 scraped items
+- 60 above threshold (saved)
+- Total cost: ~$0.004 (less than half a cent)
+
+<Note>
+Even with daily hunts, monthly costs are negligible ($0.12/month for daily 100-item hunts).
+</Note>
+
+## Error Handling
+
+The scorer gracefully handles API failures:
+
+```typescript
+try {
+  // OpenAI call
+} catch (err) {
+  console.error(`[AI Scorer] Error scoring "${item.title}":`, err);
+}
+```
+
+**Common errors:**
+- **Rate limit exceeded**: Wait and retry (Convex auto-retries actions)
+- **Invalid API key**: Falls back to keyword scoring
+- **JSON parse error**: Skips item and logs error
+- **Network timeout**: Retries up to 3 times
+
+<Warning>
+If an item fails to score, it's skipped (not saved). This prevents corrupted data but may lose potentially relevant items.
+</Warning>
+
+## Future Improvements
+
+### Semantic Search
+
+Replace keyword fallback with embeddings:
+```typescript
+const embedding = await openai.embeddings.create({
+  model: "text-embedding-3-small",
+  input: item.title,
+});
+
+// Compare cosine similarity with profile embedding
+const score = cosineSimilarity(embedding, profileEmbedding);
+```
+
+### Multi-Model Ensemble
+
+Combine multiple AI models for better accuracy:
+- GPT-4o-mini (primary)
+- Claude 3 Haiku (secondary)
+- Gemini Flash (tiebreaker)
+
+### User Feedback Loop
+
+Learn from user actions:
+- Track clicked items (implicit positive signal)
+- Allow explicit upvote/downvote
+- Fine-tune scoring weights based on feedback
+
+### Caching
+
+Cache scores for identical items:
+```typescript
+const cacheKey = `score:${hash(item.title + item.content)}`;
+const cached = await ctx.db.query("score_cache").withIndex("by_key", (q) => q.eq("key", cacheKey)).unique();
+```
+
+## Related Pages
+
+<CardGroup cols={2}>
+  <Card title="Convex Backend" icon="database" href="/architecture/convex-backend">
+    Database schema and deduplication logic
+  </Card>
+  <Card title="System Architecture" icon="diagram-project" href="/architecture/overview">
+    High-level system design
+  </Card>
+  <Card title="Hunt Command" icon="crosshairs" href="/commands/hunt">
+    See scoring in action
+  </Card>
+  <Card title="OpenAI Docs" icon="external-link" href="https://platform.openai.com/docs">
+    Official OpenAI API documentation
+  </Card>
+</CardGroup>

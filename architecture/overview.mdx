@@ -1,0 +1,285 @@
+---
+title: 'System Architecture'
+description: 'High-level architecture and design decisions for the Agentic Life Hunter CLI'
+icon: 'diagram-project'
+---
+
+## Overview
+
+The Agentic Life Hunter CLI is a distributed system that orchestrates AI-powered web scraping agents to find personalized opportunities. The architecture is built around three core components:
+
+1. **CLI Interface** — Interactive terminal UI built with Commander.js
+2. **Convex Backend** — Real-time database and serverless functions
+3. **OpenAI Integration** — GPT-4o-mini for intelligent scoring
+
+## System Architecture Diagram
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌─────────────┐
+│   CLI User   │────▶│  Convex Backend   │────▶│   OpenAI    │
+│  (Terminal)  │◀────│  (Real-time DB)   │◀────│  GPT-4o-mini│
+└─────────────┘     └──────────────────┘     └─────────────┘
+                            │
+              ┌─────────────┼─────────────┐
+              ▼             ▼             ▼
+         ┌─────────┐  ┌──────────┐  ┌──────────┐
+         │   HN    │  │  Reddit  │  │Craigslist│
+         │ Agent   │  │  Agent   │  │  Agent   │
+         └─────────┘  └──────────┘  └──────────┘
+              ▼
+         ┌──────────┐
+         │  Product │
+         │   Hunt   │
+         └──────────┘
+```
+
+## Component Overview
+
+### CLI Layer
+
+The command-line interface provides an interactive experience for users:
+
+- **Entry Point**: `bin/life-hunter.ts` using Commander.js
+- **Commands**: `setup`, `hunt`, `daily`
+- **UI Library**: Custom spinners, tables, and colored output
+- **Client**: Singleton ConvexHttpClient for backend communication
+
+<CodeGroup>
+```typescript CLI Client Singleton
+import { ConvexHttpClient } from "convex/browser";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+let _client: ConvexHttpClient | null = null;
+
+export function getConvexClient(): ConvexHttpClient {
+  if (_client) return _client;
+
+  const url = process.env.CONVEX_URL;
+  if (!url) {
+    logError("CONVEX_URL not set. Run `life-hunter setup`");
+    process.exit(1);
+  }
+
+  _client = new ConvexHttpClient(url);
+  return _client;
+}
+```
+</CodeGroup>
+
+### Convex Backend
+
+Convex provides:
+- **Real-time Database**: Stores profiles, items, and run logs
+- **Serverless Functions**: Queries, mutations, and actions
+- **Type Safety**: End-to-end TypeScript types
+- **Automatic Scaling**: Handles parallel agent execution
+
+See [Convex Backend](/architecture/convex-backend) for detailed schema and API.
+
+### OpenAI Integration
+
+AI-powered scoring using GPT-4o-mini:
+- Analyzes item relevance against user profile
+- Returns structured JSON: `{score, type, summary}`
+- Falls back to keyword matching if API key not provided
+- Processes items in batches of 20
+
+See [AI Scoring System](/architecture/ai-scoring) for implementation details.
+
+## Data Flow
+
+<Steps>
+  <Step title="User Profile Setup">
+    User runs `life-hunter setup` to configure:
+    - Skills (TypeScript, React, Python, etc.)
+    - Interests (AI, startups, crypto, etc.)
+    - Data sources (HN, Reddit, Product Hunt, Craigslist)
+    - Score threshold (minimum match score 0-100)
+    
+    Profile stored in Convex `profiles` table.
+  </Step>
+
+  <Step title="Agent Orchestration">
+    User runs `life-hunter hunt`, which:
+    - Loads profile from Convex
+    - Calls `runAllAgents` action
+    - Fires 4 scrapers in parallel (HN, Reddit, PH, Craigslist)
+    - Each scraper returns `RawItem[]` array
+  </Step>
+
+  <Step title="Deduplication">
+    Before scoring, the orchestrator:
+    - Collects all raw items from scrapers
+    - Deduplicates by URL (Set-based filtering)
+    - Removes items already in database (by `profileId + url` index)
+  </Step>
+
+  <Step title="AI Scoring">
+    Items are scored in batches:
+    - Batch size: 20 items
+    - OpenAI GPT-4o-mini analyzes each item
+    - Compares against user skills & interests
+    - Returns score (0-100), type (job/deal/research), summary
+    - Falls back to keyword matching if API unavailable
+  </Step>
+
+  <Step title="Storage & Filtering">
+    Scored items are stored:
+    - Only items above `scoreThreshold` saved to DB
+    - Upsert logic: higher scores overwrite existing entries
+    - Indexed by profile, URL, and score
+  </Step>
+
+  <Step title="Display Results">
+    CLI fetches and renders:
+    - Terminal table with scores, types, titles
+    - Statistics (total items, avg score, breakdown by source)
+    - Option to send email digest via `life-hunter daily`
+  </Step>
+</Steps>
+
+## Technology Stack
+
+### Frontend (CLI)
+
+| Technology | Purpose |
+|:-----------|:--------|
+| **Commander.js** | CLI framework and command routing |
+| **Inquirer.js** | Interactive prompts for `setup` |
+| **Chalk** | Terminal colors and styling |
+| **Ora** | Spinners and progress indicators |
+| **cli-table3** | ASCII table rendering |
+| **Nodemailer** | HTML email digest sending |
+
+### Backend (Convex)
+
+| Technology | Purpose |
+|:-----------|:--------|
+| **Convex** | Real-time database + serverless functions |
+| **TypeScript** | Type-safe schema and business logic |
+| **Zod** (via Convex) | Runtime validation of function args |
+
+### AI & Scraping
+
+| Technology | Purpose |
+|:-----------|:--------|
+| **OpenAI SDK** | GPT-4o-mini chat completions |
+| **Node Fetch** | HTTP requests to public APIs |
+| **Cheerio** | HTML parsing (if needed) |
+
+## Design Decisions
+
+### Why Convex?
+
+<Note>
+Convex was chosen for its unique combination of real-time database, serverless functions, and automatic TypeScript type generation.
+</Note>
+
+**Benefits:**
+1. **No backend code needed** — Functions defined in `convex/` directory
+2. **Type safety** — Auto-generated types for all queries/mutations
+3. **Real-time sync** — CLI can subscribe to live updates
+4. **Built-in scheduling** — Future feature: scheduled daily hunts
+5. **Generous free tier** — Perfect for CLI tools
+
+### Why GPT-4o-mini?
+
+OpenAI's `gpt-4o-mini` model balances cost and quality:
+- **Fast**: ~1-2s per batch of 20 items
+- **Cheap**: $0.15 per 1M input tokens
+- **Structured output**: JSON mode for reliable parsing
+- **Smart matching**: Goes beyond keyword matching
+
+### Why Keyword Fallback?
+
+The system gracefully degrades without OpenAI API key:
+- Calculates score based on skill/interest term matches
+- Still functional for users without API access
+- Useful for development and testing
+
+### Parallel Agent Execution
+
+All scrapers run in parallel using `Promise.allSettled()`:
+```typescript
+const scraperPromises = [
+  ctx.runAction(api.agents.scrapeHackerNews, {}),
+  ctx.runAction(api.agents.scrapeProductHunt, {}),
+  ctx.runAction(api.agents.scrapeReddit, {}),
+  ctx.runAction(api.agents.scrapeCraigslist, {}),
+];
+
+const results = await Promise.allSettled(scraperPromises);
+```
+
+**Why `allSettled`?**
+- If one scraper fails, others continue
+- Graceful error handling per-source
+- Faster overall execution (no sequential bottleneck)
+
+### Deduplication Strategy
+
+Two-level deduplication:
+
+1. **In-memory**: URL Set before scoring (avoids duplicate API calls)
+2. **Database**: `by_profile_and_url` index (prevents duplicate storage)
+
+```typescript
+// In-memory deduplication
+const seen = new Set<string>();
+const uniqueItems = allItems.filter((item) => {
+  if (seen.has(item.url)) return false;
+  seen.add(item.url);
+  return true;
+});
+
+// Database deduplication
+const existing = await ctx.db
+  .query("items")
+  .withIndex("by_profile_and_url", (q) =>
+    q.eq("profileId", profileId).eq("url", url)
+  )
+  .unique();
+```
+
+## File Structure
+
+```
+life-hunter-cli/
+├── bin/
+│   └── life-hunter.ts        # CLI entry point (Commander.js)
+├── src/
+│   ├── commands/
+│   │   ├── setup.ts          # Profile setup (Inquirer)
+│   │   ├── hunt.ts           # Agent orchestration + display
+│   │   └── daily.ts          # Email digest (Nodemailer)
+│   └── lib/
+│       ├── convex-client.ts  # ConvexHttpClient singleton
+│       └── ui.ts             # Banner, spinners, tables, colors
+├── convex/
+│   ├── schema.ts             # profiles, items, runs tables
+│   ├── profiles.ts           # Profile CRUD
+│   ├── items.ts              # Digest items + dedupe + stats
+│   └── agents.ts             # Scrapers + AI scorer + orchestrator
+├── package.json
+├── tsconfig.json
+└── .env.example
+```
+
+## Related Pages
+
+<CardGroup cols={2}>
+  <Card title="Convex Backend" icon="database" href="/architecture/convex-backend">
+    Database schema, mutations, queries, and actions
+  </Card>
+  <Card title="AI Scoring" icon="brain" href="/architecture/ai-scoring">
+    OpenAI integration and scoring algorithm
+  </Card>
+  <Card title="Hunt Command" icon="crosshairs" href="/commands/hunt">
+    Run agents and display matches
+  </Card>
+  <Card title="Setup Command" icon="gear" href="/commands/setup">
+    Configure your profile
+  </Card>
+</CardGroup>

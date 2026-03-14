@@ -1,0 +1,277 @@
+---
+title: "Craigslist Agent"
+description: "Scrapes software and web development jobs from Craigslist RSS feeds"
+---
+
+## Overview
+
+The Craigslist agent scrapes job postings from Craigslist's software and web development categories. It's ideal for:
+
+- Finding local/remote software jobs
+- Discovering contract and freelance opportunities
+- Tracking web development positions
+- Sourcing gigs and short-term projects
+
+The agent fetches **~20 job postings** from the SF Bay Area by default.
+
+## Implementation
+
+The agent is implemented as a Convex action in `convex/agents.ts:237-290`.
+
+### Default Configuration
+
+```typescript
+const region = args.region || "sfbay";
+const sections = ["sof", "web"]; // software, web/info design
+```
+
+### RSS Feed Endpoint
+
+The agent uses Craigslist's RSS feeds:
+
+```typescript
+const url = `https://${region}.craigslist.org/search/${section}?format=rss`;
+```
+
+Examples:
+- `https://sfbay.craigslist.org/search/sof?format=rss` (software jobs)
+- `https://sfbay.craigslist.org/search/web?format=rss` (web/info design jobs)
+
+## Data Fetching Process
+
+<Steps>
+  <Step title="Iterate Through Sections">
+    Fetches both software (`sof`) and web (`web`) job categories:
+    
+    ```typescript
+    for (const section of sections) {
+      const url = `https://${region}.craigslist.org/search/${section}?format=rss`;
+      const res = await fetch(url, {
+        headers: { "User-Agent": "LifeHunterCLI/1.0" },
+      });
+      // Process RSS feed
+    }
+    ```
+  </Step>
+  
+  <Step title="Parse RSS XML Manually">
+    Extracts titles and links using regex (Convex has no DOM parser):
+    
+    ```typescript
+    const text = await res.text();
+    
+    const titleRegex = /<title><!\[CDATA\[(.*?)\]\]><\/title>/g;
+    const linkRegex = /<link>(https:\/\/[^<]+)<\/link>/g;
+    
+    const titles: string[] = [];
+    const links: string[] = [];
+    
+    let m;
+    while ((m = titleRegex.exec(text)) !== null) titles.push(m[1]);
+    while ((m = linkRegex.exec(text)) !== null) links.push(m[1]);
+    ```
+  </Step>
+  
+  <Step title="Match Titles to Links">
+    Pairs titles with URLs and normalizes to `RawItem` format:
+    
+    ```typescript
+    // Skip first title (it's the feed title)
+    for (let i = 1; i < Math.min(titles.length, links.length, 11); i++) {
+      items.push({
+        title: titles[i],
+        url: links[i],
+        source: `Craigslist ${region}`,
+      });
+    }
+    ```
+  </Step>
+</Steps>
+
+## Data Structure
+
+### Input: RSS XML
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <item>
+    <title><![CDATA[Senior Full Stack Developer (TypeScript/React)]]></title>
+    <link>https://sfbay.craigslist.org/sfc/sof/d/senior-full-stack-developer/1234567.html</link>
+    <description><![CDATA[We're looking for a senior developer...]]></description>
+  </item>
+</rdf:RDF>
+```
+
+### Output: Normalized RawItem
+
+```typescript
+interface RawItem {
+  title: string;        // Job title from CDATA
+  url: string;          // Craigslist posting URL
+  content?: string;     // (Not extracted from RSS)
+  source: string;       // "Craigslist sfbay"
+}
+```
+
+## Example Items
+
+<CodeGroup>
+
+```json Software Job
+{
+  "title": "Senior Backend Engineer - Node.js/TypeScript (Remote)",
+  "url": "https://sfbay.craigslist.org/sfc/sof/d/senior-backend-engineer-node/7654321.html",
+  "source": "Craigslist sfbay"
+}
+```
+
+```json Web Developer
+{
+  "title": "Freelance React Developer Needed (3-month contract)",
+  "url": "https://sfbay.craigslist.org/eby/web/d/freelance-react-developer/1234567.html",
+  "source": "Craigslist sfbay"
+}
+```
+
+```json Contract Gig
+{
+  "title": "Python Developer for Data Pipeline (Part-time)",
+  "url": "https://sfbay.craigslist.org/pen/sof/d/python-developer-for-data/9876543.html",
+  "source": "Craigslist sfbay"
+}
+```
+
+</CodeGroup>
+
+## Performance
+
+- **Typical execution time:** 1-2 seconds
+- **Items returned:** ~20 (10 per section × 2 sections)
+- **Rate limits:** Craigslist may block rapid requests (use `User-Agent`)
+- **Concurrent requests:** Sequential (to avoid blocking)
+
+<Warning>
+  Craigslist may block requests without a proper `User-Agent` header or if too many requests are made too quickly.
+</Warning>
+
+## Customization
+
+You can customize the region by passing the `region` argument:
+
+```typescript
+// In convex/agents.ts orchestrator
+if (enabledSources.includes("Craigslist")) {
+  scraperPromises.push(
+    ctx.runAction(api.agents.scrapeCraigslist, {
+      region: "newyork" // or "seattle", "losangeles", etc.
+    })
+  );
+}
+```
+
+### Popular Craigslist Regions
+
+| Region Code | City/Area | Tech Job Volume |
+|-------------|-----------|------------------|
+| `sfbay` | San Francisco Bay Area | High |
+| `seattle` | Seattle | High |
+| `newyork` | New York City | High |
+| `losangeles` | Los Angeles | Medium |
+| `austin` | Austin | Medium |
+| `boston` | Boston | Medium |
+| `chicago` | Chicago | Medium |
+| `denver` | Denver | Low-Medium |
+
+<Tip>
+  For remote jobs, stick with `sfbay`, `seattle`, or `newyork` — they have the most tech postings.
+</Tip>
+
+### Job Categories
+
+The agent currently scrapes two categories:
+- **`sof`** — Software/QA/DBA (general software development)
+- **`web`** — Web/info design (frontend, UI/UX, full-stack)
+
+Other categories available on Craigslist:
+- `sad` — Systems/networking (DevOps, SRE)
+- `eng` — Engineering (hardware, embedded)
+- `sci` — Science/biotech (data science, ML)
+
+<Note>
+  To scrape additional categories, modify the `sections` array in `convex/agents.ts:244`.
+</Note>
+
+## Error Handling
+
+The agent handles errors gracefully:
+
+```typescript
+for (const section of sections) {
+  try {
+    const url = `https://${region}.craigslist.org/search/${section}?format=rss`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "LifeHunterCLI/1.0" },
+    });
+    
+    if (!res.ok) {
+      console.warn(`[CL Agent] ${region}/${section} returned ${res.status}`);
+      continue; // Skip to next section
+    }
+    
+    // Parse RSS
+  } catch (err) {
+    console.error(`[CL Agent] ${region}/${section} Error:`, err);
+  }
+}
+
+return items; // Returns partial results even if some sections fail
+```
+
+Common issues:
+- **403 Forbidden:** Blocked by Craigslist (missing `User-Agent` or rate limit)
+- **Invalid region:** Returns 404 or empty feed
+- **RSS parsing errors:** Skips malformed entries
+
+## AI Scoring Patterns
+
+Craigslist items are typically scored as:
+- **Job** (95-100) — Almost all Craigslist items are job postings
+- **Deal** (60-80) — Occasionally freelance "deals" or equity-based gigs
+
+The AI focuses heavily on:
+- Job title keywords ("Senior", "Remote", "TypeScript", etc.)
+- Salary mentions (if in title)
+- Required skills matching your profile
+
+<Tip>
+  Craigslist titles often include salary ranges and tech stacks. Make sure your profile skills match common terms like "React", "Node.js", "AWS", etc.
+</Tip>
+
+## Limitations
+
+1. **No job descriptions:** RSS feeds only include titles, not full descriptions
+2. **Manual region selection:** Can't search multiple regions simultaneously
+3. **Limited categories:** Only `sof` and `web` by default
+4. **No filtering:** Can't filter by salary, job type (remote/on-site), etc.
+
+<Note>
+  Future improvements could include scraping full job descriptions by fetching individual posting URLs or supporting multi-region searches.
+</Note>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Running Agents" icon="play" href="/guides/running-agents">
+    Learn how all agents work together
+  </Card>
+  <Card title="AI Scoring" icon="brain" href="/architecture/ai-scoring">
+    Understand how Craigslist items are scored
+  </Card>
+  <Card title="Custom Agents" icon="code" href="/advanced/custom-agents">
+    Build your own scraping agents
+  </Card>
+  <Card title="Hunt Command" icon="terminal" href="/commands/hunt">
+    Run the hunt command
+  </Card>
+</CardGroup>

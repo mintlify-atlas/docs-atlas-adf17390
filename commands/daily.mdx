@@ -1,0 +1,397 @@
+---
+title: "life-hunter daily"
+description: "View today's digest and send it as an email"
+---
+
+The `daily` command fetches opportunities discovered today, displays them in your terminal, and optionally sends a beautifully formatted HTML email digest.
+
+## Command Syntax
+
+```bash
+life-hunter daily
+```
+
+No flags or options — the command is interactive and uses your saved profile.
+
+## Execution Flow
+
+<Steps>
+  <Step title="Load Profile">
+    Fetches all profiles from Convex. If multiple exist, prompts you to select one.
+  </Step>
+
+  <Step title="Fetch Today's Items">
+    Queries Convex for matched items with `_creationTime` from today (based on UTC).
+    
+    ```
+    ⠹ Fetching today's digest...
+    ℹ Found 23 items for today's digest
+    ```
+  </Step>
+
+  <Step title="Display in Terminal">
+    Renders the same formatted table as `life-hunter hunt` showing:
+    - Type, source, title, score
+    - Color-coded scores
+    - Emoji indicators
+  </Step>
+
+  <Step title="Check SMTP Configuration">
+    Looks for `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` in environment variables.
+    
+    If missing, displays warning and exits:
+    ```
+    ⚠ SMTP not configured — skipping email. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env
+    ```
+  </Step>
+
+  <Step title="Confirm Email Send">
+    Prompts:
+    ```
+    ? Send digest email to sarah.chen@example.com? (Y/n)
+    ```
+    
+    Default is **Yes**. Press Enter to confirm or type `n` to skip.
+  </Step>
+
+  <Step title="Send HTML Email">
+    Uses Nodemailer to send a styled HTML email with:
+    - Gradient header with Life Hunter branding
+    - Table of opportunities with clickable links
+    - Match scores
+    - Footer with date
+  </Step>
+</Steps>
+
+## Example Session
+
+```bash
+$ life-hunter daily
+
+  📬 Daily Digest
+  ─────────────────────────────────────────
+
+⠹ Loading profiles...
+⠹ Fetching today's digest...
+ℹ Found 23 items for today's digest
+
+┌─────┬────────────┬────────────────────┬───────────────────────────────────────────────────────┬────────┐
+│ #   │ Type       │ Source             │ Title                                                 │ Score  │
+├─────┼────────────┼────────────────────┼───────────────────────────────────────────────────────┼────────┤
+│ 1   │ 💼 job     │ Hacker News        │ ML Engineer at Climate Tech Startup (Remote)          │ 92     │
+├─────┼────────────┼────────────────────┼───────────────────────────────────────────────────────┼────────┤
+│ 2   │ 🔬 project │ Product Hunt       │ Open-source ML toolkit for biotech research           │ 88     │
+├─────┼────────────┼────────────────────┼───────────────────────────────────────────────────────┼────────┤
+│ 3   │ 💼 job     │ Reddit             │ Senior Python Engineer - AI/ML Focus                  │ 85     │
+└─────┴────────────┴────────────────────┴───────────────────────────────────────────────────────┴────────┘
+
+? Send digest email to sarah.chen@example.com? Yes
+⠹ Sending email to sarah.chen@example.com...
+✔ Email sent to sarah.chen@example.com!
+```
+
+## Email Template
+
+The HTML email includes:
+
+### Header Section
+
+- **Gradient background:** Purple to pink (`#6366f1` → `#a855f7` → `#ec4899`)
+- **Title:** "🧬 Agentic Life Hunter"
+- **Subtitle:** "Your daily opportunity digest"
+
+### Body Section
+
+- **Greeting:** "Hey {name}! 👋"
+- **Count:** "Here are today's **{count}** matched opportunities:"
+- **Table:**
+  - Type column with emoji
+  - Title column with clickable link to original URL
+  - Score column (bold)
+  - Source column
+
+### Footer
+
+- "Sent by Life Hunter CLI • {date}"
+- Gray, small font
+
+### Example HTML Structure
+
+```html
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 700px; margin: 0 auto;">
+  <div style="background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899); padding: 24px; border-radius: 12px 12px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">🧬 Agentic Life Hunter</h1>
+    <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0;">Your daily opportunity digest</p>
+  </div>
+  <div style="padding: 20px; background: #fafafa; border: 1px solid #eee; border-top: none; border-radius: 0 0 12px 12px;">
+    <p>Hey Sarah Chen! 👋 Here are today's <strong>23</strong> matched opportunities:</p>
+    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+      <thead>
+        <tr style="background: #f3f4f6;">
+          <th style="padding: 8px; text-align: left;">Type</th>
+          <th style="padding: 8px; text-align: left;">Title</th>
+          <th style="padding: 8px; text-align: center;">Score</th>
+          <th style="padding: 8px; text-align: left;">Source</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding: 8px; border-bottom: 1px solid #eee;">💼 job</td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee;">
+            <a href="https://..." style="color: #6366f1; text-decoration: none;">ML Engineer at Climate Tech Startup</a>
+          </td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;"><strong>92</strong></td>
+          <td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">Hacker News</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="color: #999; font-size: 12px; margin-top: 24px;">
+      Sent by Life Hunter CLI • 3/14/2026
+    </p>
+  </div>
+</div>
+```
+
+## Email Subject Line
+
+Format:
+```
+🧬 Life Hunter Digest — {count} opportunities ({date})
+```
+
+Example:
+```
+🧬 Life Hunter Digest — 23 opportunities (3/14/2026)
+```
+
+## SMTP Configuration
+
+Required environment variables in `.env`:
+
+```bash
+# SMTP Settings
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+
+# Optional: From address (defaults to SMTP_USER)
+EMAIL_FROM=noreply@lifehunter.com
+```
+
+### Gmail Configuration
+
+For Gmail, you need an **App Password** (not your regular password):
+
+1. Go to https://myaccount.google.com/security
+2. Enable 2-Step Verification
+3. Go to "App passwords" → Generate new password
+4. Use that 16-character password in `SMTP_PASS`
+
+```bash
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=youremail@gmail.com
+SMTP_PASS=abcd efgh ijkl mnop  # 16-char app password
+```
+
+### SendGrid Configuration
+
+```bash
+SMTP_HOST=smtp.sendgrid.net
+SMTP_PORT=587
+SMTP_USER=apikey
+SMTP_PASS=SG.xxxxxxxxxxxxxxxxxxxx  # Your SendGrid API key
+EMAIL_FROM=noreply@yourdomain.com
+```
+
+### AWS SES Configuration
+
+```bash
+SMTP_HOST=email-smtp.us-east-1.amazonaws.com
+SMTP_PORT=587
+SMTP_USER=AKIAIOSFODNN7EXAMPLE
+SMTP_PASS=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+EMAIL_FROM=noreply@yourdomain.com  # Must be verified in SES
+```
+
+## Nodemailer Transport Code
+
+From `src/commands/daily.ts:128-136`:
+
+```typescript
+const transporter = nodemailer.createTransport({
+  host: smtpHost,
+  port: Number(process.env.SMTP_PORT) || 587,
+  secure: false,  // Use STARTTLS (port 587)
+  auth: {
+    user: smtpUser,
+    pass: smtpPass,
+  },
+});
+```
+
+Uses **STARTTLS** on port 587 by default. For SSL (port 465), set `secure: true`.
+
+## Error Scenarios
+
+### No Profile Found
+
+```
+⠹ Loading profiles...
+⚠ No profiles found.
+ℹ Run life-hunter setup to create a profile first.
+```
+
+**Fix:** Run `life-hunter setup` first.
+
+### No Items for Today
+
+```
+⠹ Fetching today's digest...
+⚠ No items found for today.
+ℹ Run life-hunter hunt first to populate the digest.
+```
+
+**Fix:** Run `life-hunter hunt` to scrape and match opportunities.
+
+### SMTP Not Configured
+
+```
+⚠ SMTP not configured — skipping email. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env
+```
+
+**Fix:** Add SMTP credentials to your `.env` file.
+
+### Email Send Failed
+
+```
+⠹ Sending email to sarah.chen@example.com...
+✖ Failed to send email: Error: Invalid login: 535 Authentication failed
+```
+
+**Common causes:**
+- Wrong username/password
+- Gmail: Need app password (not regular password)
+- SendGrid: Must use "apikey" as username
+- AWS SES: Email not verified
+
+**Debug steps:**
+1. Test credentials with a simple SMTP client
+2. Check for typos in `.env`
+3. Verify 2FA / app password setup
+4. Check SMTP server logs
+
+## Scheduling Daily Digest
+
+To automate daily emails, use cron:
+
+### Linux / macOS
+
+Edit crontab:
+```bash
+crontab -e
+```
+
+Add line to send digest at 9 AM daily:
+```
+0 9 * * * cd ~/life-hunter && npx life-hunter daily >> daily.log 2>&1
+```
+
+### Windows Task Scheduler
+
+1. Open Task Scheduler
+2. Create Basic Task
+3. Trigger: Daily at 9:00 AM
+4. Action: Start a program
+   - Program: `npx`
+   - Arguments: `life-hunter daily`
+   - Start in: `C:\Users\You\life-hunter`
+
+### Docker Cron
+
+Create `crontab` file:
+```
+0 9 * * * cd /app && npm run daily >> /var/log/daily.log 2>&1
+```
+
+Dockerfile:
+```dockerfile
+FROM node:20-alpine
+RUN apk add --no-cache dcron
+COPY crontab /etc/crontabs/root
+CMD ["crond", "-f"]
+```
+
+## Common Use Cases
+
+### Morning Digest Email
+
+```bash
+# Run hunt at night (11 PM)
+0 23 * * * cd ~/life-hunter && npx life-hunter hunt
+
+# Send digest in morning (8 AM)
+0 8 * * * cd ~/life-hunter && npx life-hunter daily
+```
+
+This ensures the digest has fresh data from the previous night's hunt.
+
+### Weekly Summary (Sunday Morning)
+
+```bash
+# Hunt Saturday night
+0 22 * * 6 cd ~/life-hunter && npx life-hunter hunt
+
+# Send digest Sunday morning
+0 9 * * 0 cd ~/life-hunter && npx life-hunter daily
+```
+
+### Manual Review Before Sending
+
+Run `daily` interactively to review opportunities before confirming email:
+
+```bash
+life-hunter daily
+# Review table
+# Answer "Yes" to send or "No" to skip
+```
+
+## Troubleshooting
+
+### Email Goes to Spam
+
+**Cause:** Missing SPF/DKIM records, or Gmail doesn't recognize sender.
+
+**Fix:**
+- Use a transactional email service (SendGrid, AWS SES)
+- Set up SPF/DKIM for your domain
+- Use `EMAIL_FROM` with a domain you own
+- Add sender to contacts
+
+### Email Shows Garbled HTML
+
+**Cause:** Email client doesn't support HTML.
+
+**Fix:** Add a plain-text fallback (not currently implemented).
+
+### Items from Yesterday in "Today's" Digest
+
+**Cause:** Timezone mismatch. Convex uses UTC for `_creationTime`.
+
+**Fix:** Adjust query logic to use your local timezone offset.
+
+### Getting 0 Items Even After Hunt
+
+**Cause:** You ran `hunt` yesterday, not today.
+
+**Fix:** Run `life-hunter hunt` again to populate today's date.
+
+## Related Commands
+
+- [life-hunter setup](/commands/setup) — Configure your profile
+- [life-hunter hunt](/commands/hunt) — Run agents to populate opportunities
+
+## Source Code Reference
+
+Implemented in `src/commands/daily.ts:27-200`

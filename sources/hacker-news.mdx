@@ -1,0 +1,216 @@
+---
+title: "Hacker News Agent"
+description: "Scrapes top stories and 'Who is Hiring' threads from Hacker News"
+---
+
+## Overview
+
+The Hacker News agent scrapes two types of content from Hacker News:
+
+1. **Top Stories** — The 15 most popular posts on the front page
+2. **Who is Hiring** — Recent "Who is Hiring" threads via Algolia search
+
+This agent is particularly valuable for:
+- Discovering trending tech topics and discussions
+- Finding job opportunities posted in monthly hiring threads
+- Staying current with tech news and projects
+- Identifying popular open-source releases
+
+## Implementation
+
+The agent is implemented as a Convex action in `convex/agents.ts:20-85`.
+
+### API Endpoints
+
+The agent uses the official Hacker News Firebase API:
+
+```typescript
+// Top stories endpoint
+https://hacker-news.firebaseio.com/v0/topstories.json
+
+// Individual item endpoint
+https://hacker-news.firebaseio.com/v0/item/{id}.json
+
+// Algolia search for hiring threads
+https://hn.algolia.com/api/v1/search?query="who is hiring"&tags=story&hitsPerPage=5
+```
+
+## Data Fetching Process
+
+<Steps>
+  <Step title="Fetch Top Story IDs">
+    Retrieves the list of top story IDs from the Firebase API:
+    
+    ```typescript
+    const topRes = await fetch(
+      "https://hacker-news.firebaseio.com/v0/topstories.json"
+    );
+    const topIds = (await topRes.json()) as number[];
+    ```
+  </Step>
+  
+  <Step title="Fetch Top 15 Stories in Parallel">
+    Fetches details for the first 15 stories concurrently:
+    
+    ```typescript
+    const stories = await Promise.all(
+      topIds.slice(0, 15).map(async (id) => {
+        const res = await fetch(
+          `https://hacker-news.firebaseio.com/v0/item/${id}.json`
+        );
+        return res.json();
+      })
+    );
+    ```
+  </Step>
+  
+  <Step title="Normalize Story Data">
+    Converts each story to the standard `RawItem` format:
+    
+    ```typescript
+    for (const s of stories) {
+      if (s?.title) {
+        items.push({
+          title: s.title,
+          url: s.url || `https://news.ycombinator.com/item?id=${s.id}`,
+          content: s.text || undefined,
+          source: "Hacker News",
+        });
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Search for Hiring Threads">
+    Uses Algolia search to find recent "Who is Hiring" posts:
+    
+    ```typescript
+    const hiringRes = await fetch(
+      'https://hn.algolia.com/api/v1/search?query="who is hiring"&tags=story&hitsPerPage=5'
+    );
+    const hiringData = await hiringRes.json();
+    
+    for (const hit of hiringData.hits || []) {
+      items.push({
+        title: hit.title,
+        url: hit.url || `https://news.ycombinator.com/item?id=${hit.objectID}`,
+        source: "HN Who's Hiring",
+      });
+    }
+    ```
+  </Step>
+</Steps>
+
+## Data Structure
+
+### Input: HN API Response
+
+```json
+{
+  "id": 12345678,
+  "title": "Show HN: My New Project",
+  "url": "https://example.com",
+  "type": "story",
+  "text": "This is a self post with description"
+}
+```
+
+### Output: Normalized RawItem
+
+```typescript
+interface RawItem {
+  title: string;        // Story title
+  url: string;          // External URL or HN permalink
+  content?: string;     // Post text (for Ask HN, Show HN)
+  source: string;       // "Hacker News" or "HN Who's Hiring"
+}
+```
+
+## Example Items
+
+<CodeGroup>
+
+```json Top Story
+{
+  "title": "Show HN: AI-powered CLI for job hunting",
+  "url": "https://github.com/user/project",
+  "source": "Hacker News"
+}
+```
+
+```json Hiring Thread
+{
+  "title": "Ask HN: Who is Hiring? (March 2026)",
+  "url": "https://news.ycombinator.com/item?id=12345678",
+  "source": "HN Who's Hiring"
+}
+```
+
+```json Ask HN Post
+{
+  "title": "Ask HN: Best practices for CLI design?",
+  "url": "https://news.ycombinator.com/item?id=87654321",
+  "content": "I'm building a CLI tool and wondering...",
+  "source": "Hacker News"
+}
+```
+
+</CodeGroup>
+
+## Performance
+
+- **Typical execution time:** 2-4 seconds
+- **Items returned:** ~20 (15 top stories + 5 hiring threads)
+- **Rate limits:** None (Firebase API is public)
+- **Concurrent requests:** 15 parallel story fetches
+
+<Note>
+  The Hacker News Firebase API is free and has no rate limits, making it ideal for CLI scraping.
+</Note>
+
+## Error Handling
+
+The agent handles errors gracefully:
+
+```typescript
+try {
+  // Scraping logic
+} catch (err) {
+  console.error("[HN Agent] Error:", err);
+}
+
+return items; // Returns partial results even if some fetches fail
+```
+
+Common issues:
+- **Network timeouts:** The agent continues with partial results
+- **Invalid story IDs:** Skipped automatically
+- **Algolia search failures:** Only affects hiring threads, top stories still work
+
+## AI Scoring Patterns
+
+Hacker News items are typically scored as:
+- **Job** (90-100) — Hiring threads, job postings in comments
+- **Research** (70-90) — Technical discussions, papers, new frameworks
+- **Deal** (50-70) — Launch announcements, discounts in comments
+
+<Tip>
+  Set your score threshold to 60+ to focus on highly relevant HN content that matches your profile.
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Running Agents" icon="play" href="/guides/running-agents">
+    Learn how all agents work together
+  </Card>
+  <Card title="AI Scoring" icon="brain" href="/architecture/ai-scoring">
+    Understand how HN items are scored
+  </Card>
+  <Card title="Custom Agents" icon="code" href="/advanced/custom-agents">
+    Build your own scraping agents
+  </Card>
+  <Card title="Hunt Command" icon="terminal" href="/commands/hunt">
+    Run the hunt command
+  </Card>
+</CardGroup>

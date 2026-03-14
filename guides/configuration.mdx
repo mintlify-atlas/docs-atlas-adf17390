@@ -1,0 +1,280 @@
+---
+title: "Configuration"
+description: "Complete guide to configuring environment variables and credentials for Agentic Life Hunter"
+icon: "gear"
+---
+
+## Overview
+
+Agentic Life Hunter requires configuration through environment variables to connect to services like Convex, OpenAI, and SMTP email providers. This guide covers all available configuration options and how to obtain the necessary credentials.
+
+## Environment File Setup
+
+Create a `.env` file in the root of your project:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` with your actual credentials.
+
+## Required Configuration
+
+### Convex Database URL
+
+<ParamField path="CONVEX_URL" type="string" required>
+  Your Convex project deployment URL. This is required for all operations.
+  
+  **Format:** `https://your-project.convex.cloud`
+</ParamField>
+
+#### How to Get Your Convex URL
+
+<Steps>
+  <Step title="Create a Convex account">
+    Visit [convex.dev](https://convex.dev) and sign up for a free account
+  </Step>
+  
+  <Step title="Create a new project">
+    Click "New Project" in the Convex dashboard
+  </Step>
+  
+  <Step title="Deploy your backend">
+    Run the following command in your project directory:
+    ```bash
+    npx convex dev
+    ```
+  </Step>
+  
+  <Step title="Copy your deployment URL">
+    After deployment, your `CONVEX_URL` will be displayed in the terminal and is available in your Convex dashboard under Settings → Deployment URL
+  </Step>
+</Steps>
+
+<Warning>
+  Without a valid `CONVEX_URL`, the CLI cannot store profiles or search results. This is the only truly required environment variable.
+</Warning>
+
+## Optional Configuration
+
+### OpenAI API (AI Scoring)
+
+<ParamField path="OPENAI_API_KEY" type="string" default="keyword-based fallback">
+  OpenAI API key for intelligent AI-powered scoring and matching.
+  
+  **Format:** `sk-...`
+  
+  If not provided, the system falls back to keyword-based scoring (matching your skills/interests against item content).
+</ParamField>
+
+#### How to Get Your OpenAI API Key
+
+<Steps>
+  <Step title="Create an OpenAI account">
+    Visit [platform.openai.com](https://platform.openai.com) and sign up
+  </Step>
+  
+  <Step title="Navigate to API keys">
+    Go to **API Keys** section in your account settings
+  </Step>
+  
+  <Step title="Create a new key">
+    Click "Create new secret key" and give it a descriptive name like "Life Hunter CLI"
+  </Step>
+  
+  <Step title="Copy and save the key">
+    Copy the key immediately - you won't be able to see it again!
+  </Step>
+</Steps>
+
+<Note>
+  **Cost:** OpenAI scoring uses the `gpt-4o-mini` model, which is very cost-effective. A typical hunt scanning 100 items costs less than $0.01.
+</Note>
+
+#### AI Scoring vs. Keyword Fallback
+
+| Feature | With OpenAI | Without OpenAI |
+|---------|-------------|----------------|
+| **Scoring Method** | GPT-4o-mini analyzes content semantically | Simple keyword matching |
+| **Type Detection** | AI determines if item is job/deal/research | Basic keyword rules |
+| **Summary** | AI-generated one-sentence summary | Generic relevance percentage |
+| **Accuracy** | High - understands context and nuance | Medium - literal matches only |
+| **Cost** | ~$0.0001 per item | Free |
+
+### Email Digest (SMTP)
+
+To enable email digests via the `life-hunter daily` command, configure these SMTP settings:
+
+<ParamField path="SMTP_HOST" type="string">
+  SMTP server hostname
+  
+  **Examples:**
+  - Gmail: `smtp.gmail.com`
+  - Outlook: `smtp-mail.outlook.com`
+  - SendGrid: `smtp.sendgrid.net`
+</ParamField>
+
+<ParamField path="SMTP_PORT" type="number" default="587">
+  SMTP server port
+  
+  **Common values:**
+  - `587` - TLS (recommended)
+  - `465` - SSL
+  - `25` - Unencrypted (not recommended)
+</ParamField>
+
+<ParamField path="SMTP_USER" type="string">
+  SMTP authentication username (usually your email address)
+</ParamField>
+
+<ParamField path="SMTP_PASS" type="string">
+  SMTP authentication password or app-specific password
+</ParamField>
+
+<ParamField path="EMAIL_FROM" type="string">
+  The "From" address and name for sent emails
+  
+  **Format:** `Agentic Life Hunter <your-email@gmail.com>`
+</ParamField>
+
+#### Gmail Setup Example
+
+<Steps>
+  <Step title="Enable 2-factor authentication">
+    Gmail requires 2FA to create app-specific passwords. Enable it in your Google account settings.
+  </Step>
+  
+  <Step title="Generate an app password">
+    1. Go to [Google Account → Security → App Passwords](https://myaccount.google.com/apppasswords)
+    2. Select "Mail" and "Other (Custom name)"
+    3. Enter "Life Hunter CLI"
+    4. Copy the 16-character password
+  </Step>
+  
+  <Step title="Configure your .env">
+    ```bash
+    SMTP_HOST=smtp.gmail.com
+    SMTP_PORT=587
+    SMTP_USER=your-email@gmail.com
+    SMTP_PASS=your-16-char-app-password
+    EMAIL_FROM=Agentic Life Hunter <your-email@gmail.com>
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  Never commit your `.env` file to version control! It's already in `.gitignore` by default.
+</Warning>
+
+## Complete .env Example
+
+```bash .env
+# ─── Convex ──────────────────────────────────────────
+CONVEX_URL=https://happy-mantis-123.convex.cloud
+
+# ─── OpenAI (for AI matching & scoring) ──────────────
+OPENAI_API_KEY=sk-proj-abc123def456...
+
+# ─── Email — optional, for daily digest ──────────────
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=hunter@example.com
+SMTP_PASS=abcd efgh ijkl mnop
+EMAIL_FROM=Agentic Life Hunter <hunter@example.com>
+```
+
+## Configuration Best Practices
+
+### Security
+
+<AccordionGroup>
+  <Accordion title="Protect your credentials">
+    - Never share your `.env` file or commit it to version control
+    - Use environment-specific `.env` files (`.env.local`, `.env.production`)
+    - Rotate API keys regularly, especially if they may have been exposed
+  </Accordion>
+  
+  <Accordion title="Use app-specific passwords">
+    For email providers like Gmail, always use app-specific passwords instead of your main account password. This limits the damage if credentials are compromised.
+  </Accordion>
+  
+  <Accordion title="Monitor API usage">
+    - Check your OpenAI usage dashboard regularly
+    - Set spending limits in the OpenAI dashboard to prevent unexpected charges
+    - A typical daily hunt should cost less than $0.10
+  </Accordion>
+</AccordionGroup>
+
+### Performance
+
+<Tip>
+  **Start without OpenAI**: Test the CLI with keyword-based scoring first. If you find the results too broad or not relevant enough, then add `OPENAI_API_KEY` for semantic understanding.
+</Tip>
+
+### Development vs Production
+
+You can create multiple Convex deployments for different environments:
+
+```bash
+# Development
+CONVEX_URL=https://dev-project.convex.cloud
+
+# Production
+CONVEX_URL=https://prod-project.convex.cloud
+```
+
+This allows you to test configuration changes without affecting your production data.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: CONVEX_URL not found">
+    **Cause:** The `.env` file is missing or not in the correct location.
+    
+    **Solution:**
+    1. Ensure `.env` is in the project root directory
+    2. Check that the variable is named exactly `CONVEX_URL` (case-sensitive)
+    3. Restart your terminal session after editing `.env`
+  </Accordion>
+  
+  <Accordion title="Error: OpenAI authentication failed">
+    **Cause:** Invalid or expired API key.
+    
+    **Solution:**
+    1. Verify your API key starts with `sk-`
+    2. Check for extra spaces or line breaks when copying
+    3. Generate a new key from the OpenAI dashboard
+    4. Ensure your OpenAI account has credits/billing enabled
+  </Accordion>
+  
+  <Accordion title="Error: SMTP authentication failed">
+    **Cause:** Incorrect SMTP credentials or security settings.
+    
+    **Solution:**
+    1. For Gmail, ensure you're using an app-specific password, not your account password
+    2. Verify the SMTP host and port are correct for your provider
+    3. Check if your email provider requires additional security settings (e.g., "Allow less secure apps")
+    4. Try port 465 with SSL if 587 with TLS doesn't work
+  </Accordion>
+  
+  <Accordion title="Keyword scoring feels inaccurate">
+    **Cause:** Without OpenAI, the system only does literal keyword matching.
+    
+    **Solution:**
+    1. Add more specific skills and interests in your profile
+    2. Use exact terms that appear in job postings (e.g., "TypeScript" instead of "TS")
+    3. Consider enabling OpenAI for semantic understanding
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Profile Setup" icon="user" href="/guides/profile-setup">
+    Configure your skills, interests, and preferences
+  </Card>
+  
+  <Card title="Running Agents" icon="robot" href="/guides/running-agents">
+    Start hunting for opportunities
+  </Card>
+</CardGroup>

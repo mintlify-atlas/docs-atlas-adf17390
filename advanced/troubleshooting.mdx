@@ -1,0 +1,524 @@
+---
+title: 'Troubleshooting'
+description: 'Common issues and solutions for Agentic Life Hunter CLI'
+icon: 'wrench'
+---
+
+## Overview
+
+This guide covers common errors you might encounter while using Agentic Life Hunter and how to fix them.
+
+<Tip>
+For all issues, start by enabling **verbose logging**:
+```bash
+export DEBUG=life-hunter:*
+life-hunter hunt
+```
+</Tip>
+
+---
+
+## Convex Connection Errors
+
+<Accordion title="Error: CONVEX_URL not set">
+  **Error Message:**
+  ```
+  ❌ CONVEX_URL not set. Run `life-hunter setup` or add it to your .env file.
+  ```
+
+  **Cause:**  
+  The CLI cannot connect to your Convex backend because the `CONVEX_URL` environment variable is missing.
+
+  **Solution:**
+
+  <Steps>
+    <Step title="Run the setup command">
+      ```bash
+      life-hunter setup
+      ```
+      This will prompt you for your Convex URL and save it to `.env`.
+    </Step>
+
+    <Step title="Verify your .env file">
+      Check that `.env` exists in your project root:
+      ```bash
+      cat .env
+      ```
+      
+      Should contain:
+      ```
+      CONVEX_URL=https://your-deployment.convex.cloud
+      ```
+    </Step>
+
+    <Step title="Get your Convex URL">
+      If you don't have a Convex URL:
+      1. Sign up at [convex.dev](https://convex.dev)
+      2. Create a new project
+      3. Run `npx convex dev` in your source directory
+      4. Copy the deployment URL from the output
+    </Step>
+  </Steps>
+
+  **Location in Code:**  
+  `src/lib/convex-client.ts:17-24`
+</Accordion>
+
+<Accordion title="Error: ConvexError: Function not found">
+  **Error Message:**
+  ```
+  ConvexError: Function not found: agents:runAllAgents
+  ```
+
+  **Cause:**  
+  Your Convex functions are not deployed, or the deployment is out of sync.
+
+  **Solution:**
+
+  <Steps>
+    <Step title="Deploy your Convex functions">
+      In your source directory:
+      ```bash
+      cd ~/workspace/source
+      npx convex deploy
+      ```
+    </Step>
+
+    <Step title="Verify deployment">
+      Open [Convex Dashboard](https://dashboard.convex.dev) and check that your functions are listed under "Functions".
+    </Step>
+
+    <Step title="Check your Convex URL">
+      Ensure the URL in `.env` matches your dashboard deployment URL.
+    </Step>
+  </Steps>
+</Accordion>
+
+<Accordion title="Error: Connection timeout">
+  **Error Message:**
+  ```
+  Could not load profiles: Error: Request timeout
+  ```
+
+  **Cause:**  
+  Network issues or Convex service downtime.
+
+  **Solution:**
+
+  - Check your internet connection
+  - Verify Convex status at [status.convex.dev](https://status.convex.dev)
+  - Try increasing timeout in your code:
+    ```typescript
+    const client = new ConvexHttpClient(url, {
+      httpClient: fetch,
+      timeout: 30000, // 30 seconds
+    });
+    ```
+</Accordion>
+
+---
+
+## OpenAI API Errors
+
+<Accordion title="Error: OpenAI API key missing or invalid">
+  **Error Message:**
+  ```
+  [AI Scorer] Error: Incorrect API key provided
+  ```
+
+  **Cause:**  
+  The `OPENAI_API_KEY` environment variable is missing or invalid.
+
+  **Solution:**
+
+  <Steps>
+    <Step title="Add your OpenAI API key">
+      Add this to your `.env` file:
+      ```
+      OPENAI_API_KEY=sk-...
+      ```
+    </Step>
+
+    <Step title="Get an API key">
+      1. Sign up at [platform.openai.com](https://platform.openai.com)
+      2. Navigate to API Keys → Create new key
+      3. Copy the key (starts with `sk-`)
+    </Step>
+
+    <Step title="Redeploy to Convex">
+      Environment variables are injected at deployment:
+      ```bash
+      npx convex deploy --set OPENAI_API_KEY=sk-...
+      ```
+    </Step>
+  </Steps>
+
+  **Fallback Behavior:**  
+  If OpenAI is unavailable, the system falls back to **keyword-based scoring** (convex/agents.ts:358-378).
+
+  **Location in Code:**  
+  `convex/agents.ts:327-357`
+</Accordion>
+
+<Accordion title="Error: OpenAI rate limit exceeded">
+  **Error Message:**
+  ```
+  [AI Scorer] Error: Rate limit reached for gpt-4o-mini
+  ```
+
+  **Cause:**  
+  You've exceeded OpenAI's rate limits (requests per minute or tokens per day).
+
+  **Solution:**
+
+  - **Immediate:** Wait a few minutes and retry
+  - **Reduce batch size:** Edit `convex/agents.ts:478` to process fewer items per batch:
+    ```typescript
+    const batchSize = 10; // Instead of 20
+    ```
+  - **Upgrade your OpenAI plan:** Higher tiers have better rate limits
+  - **Switch to keyword scoring:** Remove `OPENAI_API_KEY` from `.env` to use the fallback
+
+  **Location in Code:**  
+  `convex/agents.ts:476-486`
+</Accordion>
+
+<Accordion title="Error: Invalid JSON response from OpenAI">
+  **Error Message:**
+  ```
+  [AI Scorer] Error: Unexpected token in JSON at position 0
+  ```
+
+  **Cause:**  
+  OpenAI returned malformed JSON (rare, usually due to prompt issues).
+
+  **Solution:**
+
+  - Check your prompt in `convex/agents.ts:333-345`
+  - Ensure you're using `response_format: { type: "json_object" }` (line 350)
+  - Log the raw response for debugging:
+    ```typescript
+    const content = completion.choices[0]?.message?.content;
+    console.log("[DEBUG] Raw OpenAI response:", content);
+    ```
+</Accordion>
+
+---
+
+## Scraper Failures
+
+<Accordion title="Error: Agent returned 403/401 status">
+  **Error Message:**
+  ```
+  [Reddit Agent] r/programming returned 403
+  ```
+
+  **Cause:**  
+  The target API blocked your request (missing User-Agent, rate limiting, or auth issues).
+
+  **Solution:**
+
+  <Steps>
+    <Step title="Add User-Agent header">
+      Most APIs require this header:
+      ```typescript
+      const res = await fetch(url, {
+        headers: { "User-Agent": "LifeHunterCLI/1.0" },
+      });
+      ```
+    </Step>
+
+    <Step title="Check API rate limits">
+      Some APIs (Reddit, GitHub) have strict rate limits. Add delays:
+      ```typescript
+      await new Promise(r => setTimeout(r, 1000)); // 1s delay
+      ```
+    </Step>
+
+    <Step title="Use API authentication">
+      For APIs requiring auth (e.g., GitHub), add a token:
+      ```typescript
+      headers: {
+        "Authorization": `Bearer ${process.env.GITHUB_TOKEN}`,
+        "User-Agent": "LifeHunterCLI/1.0",
+      }
+      ```
+    </Step>
+  </Steps>
+
+  **Location in Code:**  
+  - Reddit: `convex/agents.ts:186-199`
+  - Craigslist: `convex/agents.ts:247-260`
+</Accordion>
+
+<Accordion title="Error: Agent returned empty results">
+  **Cause:**  
+  The scraper ran successfully but found no items (API changes, parsing errors, or no new content).
+
+  **Solution:**
+
+  <Steps>
+    <Step title="Test the API manually">
+      Use `curl` or Postman to verify the API still works:
+      ```bash
+      curl "https://www.reddit.com/r/programming/hot.json?limit=5"
+      ```
+    </Step>
+
+    <Step title="Check for API schema changes">
+      If the API response structure changed, update your parser. Example:
+      ```typescript
+      // Old
+      data.items.forEach(...)
+      
+      // New (if API changed)
+      data.results.forEach(...)
+      ```
+    </Step>
+
+    <Step title="Add debug logging">
+      Log raw responses to inspect the data:
+      ```typescript
+      const data = await res.json();
+      console.log("[DEBUG] Raw API response:", JSON.stringify(data));
+      ```
+    </Step>
+  </Steps>
+</Accordion>
+
+<Accordion title="Error: Agent timeout">
+  **Cause:**  
+  The scraper took too long (> 60 seconds is Convex's default action timeout).
+
+  **Solution:**
+
+  - Reduce the number of items fetched per agent
+  - Use pagination instead of fetching all items at once
+  - Optimize HTTP requests (use `Promise.all` for parallel fetching)
+  
+  Example optimization:
+  ```typescript
+  // Instead of sequential
+  for (const sub of subs) {
+    await fetch(...);
+  }
+  
+  // Use parallel
+  await Promise.all(subs.map(sub => fetch(...)));
+  ```
+</Accordion>
+
+---
+
+## Email Delivery Issues
+
+<Accordion title="Error: SMTP not configured">
+  **Error Message:**
+  ```
+  ⚠️  SMTP not configured — skipping email. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env
+  ```
+
+  **Cause:**  
+  SMTP credentials are missing from your `.env` file.
+
+  **Solution:**
+
+  Add these variables to `.env`:
+  ```
+  SMTP_HOST=smtp.gmail.com
+  SMTP_PORT=587
+  SMTP_USER=your-email@gmail.com
+  SMTP_PASS=your-app-password
+  EMAIL_FROM=your-email@gmail.com
+  ```
+
+  **Gmail Setup:**
+  1. Enable 2FA on your Google account
+  2. Generate an [App Password](https://myaccount.google.com/apppasswords)
+  3. Use the app password (not your regular password) in `.env`
+
+  **Location in Code:**  
+  `src/commands/daily.ts:101-108`
+</Accordion>
+
+<Accordion title="Error: Failed to send email (SMTP errors)">
+  **Error Message:**
+  ```
+  ❌ Failed to send email: Error: Invalid login: 535 Authentication failed
+  ```
+
+  **Cause:**  
+  SMTP credentials are incorrect or your email provider blocked the login.
+
+  **Solution:**
+
+  <Steps>
+    <Step title="Verify credentials">
+      Test SMTP settings using a tool like [SMTP Test](https://www.smtper.net/)
+    </Step>
+
+    <Step title="Check provider settings">
+      - **Gmail:** Requires App Password (not regular password)
+      - **Outlook:** Use `smtp-mail.outlook.com` port 587
+      - **SendGrid:** Use API key as password
+    </Step>
+
+    <Step title="Enable less secure apps (if needed)">
+      Some providers require enabling "less secure app access" in account settings.
+    </Step>
+  </Steps>
+
+  **Location in Code:**  
+  `src/commands/daily.ts:127-197`
+</Accordion>
+
+---
+
+## Environment Variable Problems
+
+<Accordion title="Error: .env file not loading">
+  **Cause:**  
+  The `.env` file is in the wrong location or not being loaded by `dotenv`.
+
+  **Solution:**
+
+  <Steps>
+    <Step title="Check .env location">
+      It must be in your project root (not `/src` or `/convex`):
+      ```bash
+      ls -la .env
+      ```
+    </Step>
+
+    <Step title="Verify dotenv is loading">
+      The CLI loads `.env` in `src/lib/convex-client.ts:6`:
+      ```typescript
+      dotenv.config();
+      ```
+    </Step>
+
+    <Step title="Check for syntax errors">
+      Ensure `.env` has no extra quotes or spaces:
+      ```
+      # ❌ Wrong
+      CONVEX_URL="https://..."
+      
+      # ✅ Correct
+      CONVEX_URL=https://...
+      ```
+    </Step>
+  </Steps>
+</Accordion>
+
+<Accordion title="Error: Environment variables not available in Convex">
+  **Cause:**  
+  Convex actions run in the cloud and don't have access to your local `.env` file.
+
+  **Solution:**
+
+  Set environment variables in Convex:
+  ```bash
+  npx convex deploy --set OPENAI_API_KEY=sk-...
+  npx convex deploy --set SMTP_HOST=smtp.gmail.com
+  ```
+
+  Or use the dashboard:
+  1. Open [Convex Dashboard](https://dashboard.convex.dev)
+  2. Go to Settings → Environment Variables
+  3. Add your variables
+
+  **Location in Code:**  
+  Variables accessed in actions (e.g., `convex/agents.ts:327`)
+</Accordion>
+
+---
+
+## Debug Mode
+
+Enable detailed logging for all operations:
+
+```bash
+export DEBUG=life-hunter:*
+export NODE_ENV=development
+life-hunter hunt
+```
+
+This will output:
+- HTTP request/response details
+- Database queries
+- AI scoring prompts and responses
+- Agent execution times
+
+---
+
+## Common CLI Issues
+
+<Accordion title="Command not found: life-hunter">
+  **Cause:**  
+  The CLI is not installed globally or not in your PATH.
+
+  **Solution:**
+
+  ```bash
+  npm install -g .
+  ```
+
+  Or use `npx` to run directly:
+  ```bash
+  npx life-hunter hunt
+  ```
+</Accordion>
+
+<Accordion title="Profile not found">
+  **Error Message:**
+  ```
+  ⚠️  No profiles found.
+  ℹ️  Run life-hunter setup to create a profile first.
+  ```
+
+  **Cause:**  
+  No profiles exist in your Convex database.
+
+  **Solution:**
+
+  Run the setup command:
+  ```bash
+  life-hunter setup
+  ```
+
+  This creates a profile and stores it in Convex.
+
+  **Location in Code:**  
+  `src/commands/hunt.ts:49-55`
+</Accordion>
+
+---
+
+## Still Having Issues?
+
+If you're still stuck:
+
+1. **Check Convex logs:** [dashboard.convex.dev](https://dashboard.convex.dev) → Logs
+2. **Enable debug mode:** `export DEBUG=life-hunter:*`
+3. **Verify all environment variables:**
+   ```bash
+   cat .env
+   ```
+4. **Redeploy Convex functions:**
+   ```bash
+   npx convex deploy
+   ```
+5. **Open a GitHub issue:** Include error logs and steps to reproduce
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Convex Schema" icon="database" href="/advanced/convex-schema">
+    Understand the database structure
+  </Card>
+  <Card title="Custom Agents" icon="robot" href="/advanced/custom-agents">
+    Build your own scraping agents
+  </Card>
+</CardGroup>

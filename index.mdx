@@ -1,97 +1,173 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Agentic Life Hunter CLI"
+description: "AI-powered CLI that scrapes opportunities from HN, Product Hunt, Reddit, and Craigslist, matching them to your skills and interests"
 ---
 
-## Setting up
+<div className="bg-white border border-[#e0e0e0] rounded-lg shadow-[0_2px_8px_rgba(0,0,0,0.05)] p-8 mb-8">
+  <div className="text-center mb-6">
+    <h1 className="text-5xl font-bold text-[#1a1a1a] mb-4">
+      🧬 Agentic Life Hunter
+    </h1>
+    <p className="text-xl text-[#545454] font-normal">
+      AI-powered agents that scrape the web and match opportunities to your unique skills & interests — all from the terminal.
+    </p>
+  </div>
+  
+  <div className="flex justify-center gap-4 mt-6">
+    <a 
+      href="/quickstart" 
+      className="inline-block bg-[#94cb04] text-white px-6 py-3 rounded-md font-semibold hover:opacity-90 transition-opacity"
+    >
+      Get Started →
+    </a>
+    <a 
+      href="https://github.com/hempun10/agentic-hunter-cli" 
+      className="inline-block bg-[#e6e6e6] text-[#1a1a1a] px-6 py-3 rounded-md font-semibold hover:bg-[#d6d6d6] transition-colors"
+    >
+      View on GitHub
+    </a>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+## What is Life Hunter?
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+Life Hunter is an intelligent CLI tool that automates opportunity discovery across the web. Configure your profile once with your skills and interests, then let AI-powered agents continuously scrape and match opportunities tailored specifically to you.
 
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="AI-Powered Matching" icon="brain" href="/architecture/ai-scoring">
+    Uses OpenAI GPT-4o-mini to intelligently score opportunities based on your profile
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Multi-Source Scraping" icon="globe" href="/guides/running-agents">
+    Scrapes Hacker News, Product Hunt, Reddit, and Craigslist in parallel
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Real-time Storage" icon="database" href="/architecture/convex-backend">
+    Convex backend provides real-time data synchronization and deduplication
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Email Digests" icon="envelope" href="/guides/email-digest">
+    Get daily summaries of matched opportunities delivered to your inbox
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Key Features
 
-Everything you need to create world-class documentation.
+<AccordionGroup>
+  <Accordion title="🎯 Personalized Profile Matching">
+    Configure your skills (TypeScript, React, Python, ML) and interests (AI, startups, web3) once. The AI agents score each opportunity against your profile to surface only what matters to you.
+  </Accordion>
+  
+  <Accordion title="🤖 Parallel Agent Orchestration">
+    Four specialized agents scrape different sources simultaneously:
+    - **Hacker News Agent** — Top stories + "Who's Hiring" threads
+    - **Product Hunt Agent** — Trending products and launches
+    - **Reddit Agent** — r/programming, r/webdev, r/MachineLearning, r/forhire
+    - **Craigslist Agent** — Software and web development jobs
+  </Accordion>
+  
+  <Accordion title="🧠 AI-Powered Scoring">
+    Each scraped item is analyzed by OpenAI GPT-4o-mini, which provides:
+    - A relevance score (0-100) based on your profile
+    - Type classification (job, deal, or research)
+    - A one-sentence AI-generated summary
+    Falls back to keyword matching when OpenAI is unavailable.
+  </Accordion>
+  
+  <Accordion title="📊 Beautiful Terminal Interface">
+    See your matched opportunities in a clean, colorful terminal table with:
+    - Score-based highlighting
+    - Source and type indicators
+    - Clickable URLs
+    - Summary stats (total scraped, matched, run time)
+  </Accordion>
+</AccordionGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Quick Example
 
-## Need inspiration?
+<Steps>
+  <Step title="Install and Configure">
+    Install the CLI globally and set up your profile:
+    
+    ```bash
+    npm install -g life-hunter-cli
+    life-hunter setup
+    ```
+    
+    Enter your skills, interests, and preferred data sources.
+  </Step>
+  
+  <Step title="Deploy Agents">
+    Run the hunt command to scrape all sources:
+    
+    ```bash
+    life-hunter hunt
+    ```
+    
+    Agents scrape in parallel and AI-score each item against your profile.
+  </Step>
+  
+  <Step title="Review Results">
+    See a beautiful terminal table with matched opportunities:
+    
+    ```
+    ╔══════════════════════════════════════════════════════════════╗
+    ║  Score  │  Type      │  Source          │  Title            ║
+    ╠══════════════════════════════════════════════════════════════╣
+    ║  95     │  job       │  Hacker News     │  Senior TS Dev    ║
+    ║  87     │  research  │  Product Hunt    │  AI Code Tool     ║
+    ╚══════════════════════════════════════════════════════════════╝
+    ```
+  </Step>
+  
+  <Step title="Get Email Digest">
+    Optionally send today's matches as an email:
+    
+    ```bash
+    life-hunter daily
+    ```
+  </Step>
+</Steps>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+## How It Works
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌─────────────┐
+│   CLI User   │────▶│  Convex Backend   │────▶│   OpenAI    │
+│  (Terminal)  │◀────│  (Real-time DB)   │◀────│  GPT-4o-mini│
+└─────────────┘     └──────────────────┘     └─────────────┘
+                            │
+              ┌─────────────┼─────────────┐
+              ▼             ▼             ▼
+         ┌─────────┐  ┌──────────┐  ┌──────────┐
+         │   HN    │  │  Reddit  │  │Craigslist│
+         │ Agent   │  │  Agent   │  │  Agent   │
+         └─────────┘  └──────────┘  └──────────┘
+              ▼
+         ┌──────────┐
+         │  Product │
+         │   Hunt   │
+         └──────────┘
+```
+
+1. **Profile** → Stored in Convex (skills, interests, sources, score threshold)
+2. **Hunt** → Agents scrape sources in parallel via Convex actions
+3. **Score** → Each item scored by OpenAI (or keyword fallback)
+4. **Dedupe** → By URL to avoid duplicates across runs
+5. **Display** → Beautiful terminal table with scores & summaries
+6. **Daily** → Optional email digest via Nodemailer
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install the CLI and set up dependencies
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running in 5 minutes
+  </Card>
+  <Card title="Commands" icon="terminal" href="/commands/setup">
+    Explore all available commands
+  </Card>
+</CardGroup>
+
+<Note>
+  Life Hunter requires Node.js 20+ and active Convex and OpenAI API keys. See the [Configuration Guide](/guides/configuration) for details.
+</Note>

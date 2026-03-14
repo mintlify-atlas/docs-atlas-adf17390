@@ -1,0 +1,288 @@
+---
+title: Installation
+description: Get Life Hunter CLI installed and configured on your system
+---
+
+## System Requirements
+
+Before installing Life Hunter, ensure your system meets these requirements:
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    **Version 20.0.0 or higher** required
+  </Card>
+  
+  <Card title="npm/yarn/pnpm" icon="box">
+    Any modern package manager
+  </Card>
+</CardGroup>
+
+<Note>
+  Check your Node.js version with `node --version`
+</Note>
+
+## Installation Methods
+
+### Global Installation (Recommended)
+
+Install Life Hunter globally to use the `life-hunter` command from anywhere:
+
+<CodeGroup>
+```bash npm
+npm install -g life-hunter-cli
+```
+
+```bash yarn
+yarn global add life-hunter-cli
+```
+
+```bash pnpm
+pnpm add -g life-hunter-cli
+```
+</CodeGroup>
+
+Verify the installation:
+
+```bash
+life-hunter --version
+# Output: 1.0.0
+```
+
+### Local Development Installation
+
+For development or customization, clone and build from source:
+
+```bash
+git clone https://github.com/himalpun/life-hunter-cli.git
+cd life-hunter-cli
+npm install
+```
+
+<Tip>
+  When running from source, use `npx tsx bin/life-hunter.ts` instead of `life-hunter`
+</Tip>
+
+## Convex Setup
+
+Life Hunter uses [Convex](https://convex.dev) as its real-time database backend. You'll need to create a Convex project:
+
+<Steps>
+  <Step title="Initialize Convex">
+    Run the Convex development server:
+    
+    ```bash
+    npx convex dev
+    ```
+    
+    This will:
+    - Prompt you to create a Convex account (if you don't have one)
+    - Create a new Convex project
+    - Deploy your database schema
+    - Generate a `CONVEX_URL` for your project
+  </Step>
+  
+  <Step title="Follow the Prompts">
+    The Convex CLI will guide you through:
+    
+    1. **Authentication** — Sign in with GitHub or create an account
+    2. **Project Creation** — Name your project (e.g., "life-hunter")
+    3. **Deployment** — Wait for the initial deployment to complete
+    
+    <Note>
+      The free tier includes 1 million function calls per month — more than enough for personal use!
+    </Note>
+  </Step>
+  
+  <Step title="Copy Your Deployment URL">
+    After deployment completes, you'll see output like:
+    
+    ```bash
+    ✔ Deployment complete!
+    
+    Deployment URL: https://your-project.convex.cloud
+    ```
+    
+    Save this URL — you'll need it for environment configuration.
+  </Step>
+</Steps>
+
+## Environment Configuration
+
+Create a `.env` file in your project directory (or `~/.life-hunter/.env` for global installations):
+
+<Steps>
+  <Step title="Copy the Example File">
+    ```bash
+    cp .env.example .env
+    ```
+  </Step>
+  
+  <Step title="Configure Required Variables">
+    Edit `.env` and add your Convex URL:
+    
+    ```bash .env
+    # ─── Convex ──────────────────────────────────────────
+    CONVEX_URL=https://your-project.convex.cloud
+    
+    # ─── OpenAI (for AI matching & scoring) ──────────────
+    OPENAI_API_KEY=sk-...
+    
+    # ─── Email — optional, for daily digest ──────────────
+    SMTP_HOST=smtp.gmail.com
+    SMTP_PORT=587
+    SMTP_USER=your-email@gmail.com
+    SMTP_PASS=your-app-password
+    EMAIL_FROM=Agentic Life Hunter <your-email@gmail.com>
+    ```
+    
+    <Warning>
+      **Required**: `CONVEX_URL` is mandatory for Life Hunter to function.
+    </Warning>
+  </Step>
+  
+  <Step title="Add OpenAI API Key (Optional)">
+    For AI-powered matching, add your [OpenAI API key](https://platform.openai.com/api-keys):
+    
+    ```bash
+    OPENAI_API_KEY=sk-proj-...
+    ```
+    
+    <Tip>
+      Without an OpenAI key, Life Hunter falls back to keyword-based matching. It works, but AI scoring is significantly more accurate.
+    </Tip>
+  </Step>
+  
+  <Step title="Configure Email (Optional)">
+    For email digests, configure SMTP settings:
+    
+    ```bash
+    SMTP_HOST=smtp.gmail.com
+    SMTP_PORT=587
+    SMTP_USER=your-email@gmail.com
+    SMTP_PASS=your-app-password
+    EMAIL_FROM=Agentic Life Hunter <your-email@gmail.com>
+    ```
+    
+    <Accordion title="How to get Gmail App Password">
+      1. Go to [Google Account Settings](https://myaccount.google.com/)
+      2. Navigate to Security → 2-Step Verification
+      3. Scroll to "App passwords"
+      4. Generate a new app password for "Mail"
+      5. Use this password (not your regular Gmail password)
+    </Accordion>
+  </Step>
+</Steps>
+
+## Environment Variables Reference
+
+| Variable | Required | Default | Description |
+|:---------|:---------|:--------|:------------|
+| `CONVEX_URL` | ✅ Yes | — | Your Convex deployment URL |
+| `OPENAI_API_KEY` | ⚠️ Recommended | — | OpenAI API key for AI scoring (falls back to keyword matching) |
+| `SMTP_HOST` | ❌ No | — | SMTP server hostname (e.g., `smtp.gmail.com`) |
+| `SMTP_PORT` | ❌ No | `587` | SMTP port (usually 587 for TLS) |
+| `SMTP_USER` | ❌ No | — | SMTP username (usually your email) |
+| `SMTP_PASS` | ❌ No | — | SMTP password (use app password for Gmail) |
+| `EMAIL_FROM` | ❌ No | — | Sender email address with display name |
+
+## Verification
+
+Verify your installation is working correctly:
+
+<Steps>
+  <Step title="Check CLI Access">
+    ```bash
+    life-hunter --help
+    ```
+    
+    You should see:
+    
+    ```
+    🧬 Agentic Life Hunter — AI agents that scrape the web and match 
+    opportunities to your unique skills & interests.
+    
+    Usage: life-hunter [options] [command]
+    
+    Commands:
+      setup   Configure your profile — skills, interests, and data sources
+      hunt    Deploy AI agents to scrape & match opportunities in real-time
+      daily   View today's digest and send it as an email
+      help    Display help for command
+    ```
+  </Step>
+  
+  <Step title="Test Convex Connection">
+    Try running setup (we'll configure your profile in the next section):
+    
+    ```bash
+    life-hunter setup
+    ```
+    
+    If Convex is configured correctly, you'll see the profile setup prompts.
+  </Step>
+</Steps>
+
+<Check>
+  **Installation complete!** You're ready to configure your profile and start hunting.
+</Check>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Command not found: life-hunter">
+    If you installed globally but the command isn't found:
+    
+    1. Check your npm global bin path:
+       ```bash
+       npm bin -g
+       ```
+    
+    2. Ensure this path is in your `$PATH`:
+       ```bash
+       echo $PATH
+       ```
+    
+    3. If missing, add to your shell profile (`~/.bashrc` or `~/.zshrc`):
+       ```bash
+       export PATH="$(npm bin -g):$PATH"
+       ```
+  </Accordion>
+  
+  <Accordion title="Convex deployment failed">
+    If `npx convex dev` fails:
+    
+    - Ensure you have Node.js 20+ installed
+    - Try logging out and back in:
+      ```bash
+      npx convex logout
+      npx convex dev
+      ```
+    - Check [Convex Status](https://status.convex.dev/) for outages
+  </Accordion>
+  
+  <Accordion title="Environment variables not loading">
+    Make sure your `.env` file is in the correct location:
+    
+    - **Source installation**: In the `life-hunter-cli/` directory
+    - **Global installation**: Create `~/.life-hunter/.env`
+    
+    Verify variables are loaded:
+    ```bash
+    node -e "require('dotenv').config(); console.log(process.env.CONVEX_URL)"
+    ```
+  </Accordion>
+  
+  <Accordion title="OpenAI API errors">
+    If you see OpenAI-related errors:
+    
+    - Verify your API key is valid at [platform.openai.com](https://platform.openai.com/api-keys)
+    - Check you have credits available
+    - Life Hunter will automatically fall back to keyword matching if OpenAI fails
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+  Complete tutorial: Configure your profile and run your first hunt
+</Card>

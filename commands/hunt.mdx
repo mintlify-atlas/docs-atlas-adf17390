@@ -1,0 +1,295 @@
+---
+title: "life-hunter hunt"
+description: "Deploy AI agents to scrape and match opportunities in real-time"
+---
+
+The `hunt` command is the core of Life Hunter. It orchestrates multiple scraping agents in parallel, feeds results to OpenAI for matching, and displays personalized opportunities ranked by relevance.
+
+## Command Syntax
+
+```bash
+life-hunter hunt
+```
+
+No flags or options — the command automatically uses your saved profile.
+
+## Execution Flow
+
+When you run `life-hunter hunt`, here's what happens:
+
+<Steps>
+  <Step title="Load Profile">
+    Fetches all profiles from Convex. If multiple profiles exist, prompts you to select one.
+    
+    ```
+    ⠹ Loading profiles...
+    ℹ Using profile: Sarah Chen (sarah.chen@example.com)
+    ```
+  </Step>
+
+  <Step title="Deploy Scraping Agents">
+    Calls the Convex action `api.agents.runAllAgents` which:
+    - Scrapes Hacker News, Product Hunt, Reddit, and Craigslist **in parallel**
+    - Extracts titles, URLs, descriptions, and metadata
+    - Returns raw items from all sources
+    
+    ```
+    ⠹ Deploying agents... scraping HN, Product Hunt, Reddit, Craigslist
+    ```
+  </Step>
+
+  <Step title="AI Matching & Scoring">
+    For each scraped item, the orchestrator:
+    - Sends item content + your profile (skills, interests) to OpenAI
+    - Gets back a relevance score (0-100) and classification (job, deal, project)
+    - Filters out items below your `scoreThreshold`
+    - Saves matched items to Convex
+  </Step>
+
+  <Step title="Fetch Matched Results">
+    Retrieves the top 50 matched items for your profile, sorted by score descending.
+    
+    ```
+    ⠹ Fetching matched items...
+    ```
+  </Step>
+
+  <Step title="Display Results Table">
+    Renders a formatted terminal table with:
+    - Row number
+    - Type with emoji (💼 job, 🏷️ deal, 🔬 project)
+    - Source platform
+    - Title (truncated to 52 chars)
+    - Match score (color-coded: green ≥80, yellow ≥60, dim &lt;60)
+  </Step>
+
+  <Step title="Show Statistics">
+    Displays aggregate stats:
+    - Total items matched
+    - Average and top scores
+    - Breakdown by source and type
+    - Execution time
+  </Step>
+</Steps>
+
+## Example Output
+
+```bash
+$ life-hunter hunt
+
+  🎯 Starting the Hunt
+  ─────────────────────────────────────────
+
+⠹ Loading profiles...
+ℹ Using profile: Sarah Chen (sarah.chen@example.com)
+⠹ Deploying agents... scraping HN, Product Hunt, Reddit, Craigslist
+ℹ Scraped 847 items → 23 matched your profile
+⠹ Fetching matched items...
+
+┌─────┬────────────┬────────────────────┬───────────────────────────────────────────────────────┬────────┐
+│ #   │ Type       │ Source             │ Title                                                 │ Score  │
+├─────┼────────────┼────────────────────┼───────────────────────────────────────────────────────┼────────┤
+│ 1   │ 💼 job     │ Hacker News        │ ML Engineer at Climate Tech Startup (Remote)          │ 92     │
+├─────┼────────────┼────────────────────┼───────────────────────────────────────────────────────┼────────┤
+│ 2   │ 🔬 project │ Product Hunt       │ Open-source ML toolkit for biotech research           │ 88     │
+├─────┼────────────┼────────────────────┼───────────────────────────────────────────────────────┼────────┤
+│ 3   │ 💼 job     │ Reddit             │ Senior Python Engineer - AI/ML Focus                  │ 85     │
+├─────┼────────────┼────────────────────┼───────────────────────────────────────────────────────┼────────┤
+│ 4   │ 🏷️ deal    │ Product Hunt       │ FastAPI course bundle (50% off)                       │ 67     │
+├─────┼────────────┼────────────────────┼───────────────────────────────────────────────────────┼────────┤
+│ 5   │ 🔬 project │ Hacker News        │ Show HN: Docker-based ML deployment tool              │ 63     │
+└─────┴────────────┴────────────────────┴───────────────────────────────────────────────────────┴────────┘
+
+╭────────────────────────────────────────────────────────╮
+│                                                        │
+│   ━━━ Hunt Summary ━━━                                 │
+│                                                        │
+│   Total items:  23                                     │
+│   Avg score:    74                                     │
+│   Top score:    92                                     │
+│   Time:         12.3s                                  │
+│                                                        │
+│   By Source:                                           │
+│     Hacker News: 8                                     │
+│     Product Hunt: 7                                    │
+│     Reddit: 6                                          │
+│     Craigslist: 2                                      │
+│                                                        │
+│   By Type:                                             │
+│     💼 job: 12                                         │
+│     🔬 project: 7                                      │
+│     🏷️ deal: 4                                         │
+│                                                        │
+╰────────────────────────────────────────────────────────╯
+
+  Run life-hunter daily to get this as an email digest.
+```
+
+## Profile Selection (Multiple Profiles)
+
+If you've created multiple profiles via `setup`, you'll be prompted to choose:
+
+```
+? Select a profile: (Use arrow keys)
+❯ Sarah Chen (sarah.chen@example.com) — Python, Machine Learning, FastAPI
+  John Doe (john@example.com) — TypeScript, React, Node.js
+```
+
+The prompt shows:
+- Name
+- Email
+- First 3 skills (preview)
+
+## Agent Orchestration Details
+
+The command calls `api.agents.runAllAgents`, which is a Convex action that:
+
+1. **Fetches your profile** to get sources, skills, interests, and threshold
+2. **Spawns scraper agents** for each selected source:
+   - `hackernews-agent` — Scrapes HN front page + Who Is Hiring threads
+   - `producthunt-agent` — Scrapes today's featured products
+   - `reddit-agent` — Scrapes r/forhire, r/SideProject, r/startups
+   - `craigslist-agent` — Scrapes gigs section for your metro area
+3. **Runs agents in parallel** using `Promise.all()` for speed
+4. **Sends items to OpenAI** with prompt:
+   ```
+   Score this opportunity for a person with skills: [Python, ML, ...]
+   and interests: [AI, climate tech, ...]. Return JSON: {score, type, reasoning}
+   ```
+5. **Filters by threshold** — Only saves items with `score >= scoreThreshold`
+6. **Stores in Convex** with profile linkage for later retrieval
+
+The result object returned:
+
+```typescript
+{
+  totalScraped: 847,  // Total items found across all sources
+  totalMatched: 23    // Items scoring above threshold
+}
+```
+
+## Results Table Format
+
+Implemented using `cli-table3` in `src/lib/ui.ts:81-130`:
+
+| Column | Width | Description |
+|--------|-------|-------------|
+| # | 5 chars | Row number (dimmed) |
+| Type | 12 chars | Emoji + type name (job/deal/project) |
+| Source | 20 chars | Platform name (cyan) |
+| Title | 55 chars | Truncated with "..." if >52 chars |
+| Score | 8 chars | Color-coded: green (≥80), yellow (≥60), dim (&lt;60) |
+
+## Performance Considerations
+
+Typical execution time:
+- **Fast:** 8-15 seconds (if sources respond quickly)
+- **Slow:** 20-30 seconds (if Reddit or Craigslist lag)
+- **Very slow:** 30-60 seconds (if OpenAI API is under load)
+
+The bottleneck is usually:
+1. Waiting for scrapers to finish (I/O bound)
+2. OpenAI API rate limits (if matching 500+ items)
+
+## Error Scenarios
+
+### No Profile Found
+
+```
+⠹ Loading profiles...
+⚠ No profiles found.
+ℹ Run life-hunter setup to create a profile first.
+```
+
+**Fix:** Run `life-hunter setup` to create your first profile.
+
+### Convex Connection Failed
+
+```
+⠹ Loading profiles...
+✖ Could not load profiles: Error: fetch failed
+ℹ Run life-hunter setup to create a profile first.
+```
+
+**Fix:** Check your `.env` file has `CONVEX_URL` set correctly.
+
+### Hunt Action Failed
+
+```
+⠹ Deploying agents... scraping HN, Product Hunt, Reddit, Craigslist
+✖ Hunt failed: Error: OpenAI API key not configured
+```
+
+**Fix:** Set `OPENAI_API_KEY` in `.env` or in Convex environment variables.
+
+### No Matches Found
+
+```
+ℹ Scraped 412 items → 0 matched your profile
+
+╭────────────────────────────────────────────────────────╮
+│ 🔍 No matching items found. Try broadening your        │
+│ interests!                                             │
+╰────────────────────────────────────────────────────────╯
+```
+
+**Fix:** Lower your `scoreThreshold` or add more interests/skills in your profile.
+
+## Common Use Cases
+
+### Daily Job Hunt
+
+Run `hunt` once per day to find new job postings:
+
+```bash
+# Add to crontab (9 AM daily)
+0 9 * * * cd ~/life-hunter && npx life-hunter hunt >> hunt.log 2>&1
+```
+
+### Explore New Projects
+
+Lower your threshold temporarily to discover side projects:
+
+1. Edit profile in Convex dashboard: set `scoreThreshold = 30`
+2. Run `life-hunter hunt`
+3. Review projects with scores 30-60
+4. Reset threshold to 50+ for daily use
+
+### Multi-Profile Comparison
+
+Create two profiles (e.g., "Frontend" and "Backend") and run hunt with each to see different opportunity sets.
+
+## Troubleshooting
+
+### Stuck on "Deploying agents..."
+
+**Cause:** One or more scrapers timed out.
+
+**Fix:**
+- Check internet connection
+- Check if target sites (HN, PH, Reddit) are up
+- Reduce sources in your profile
+
+### Getting 0 Matches Every Time
+
+**Cause:** Threshold too high or interests too narrow.
+
+**Fix:**
+- Run `life-hunter setup` again with lower threshold (e.g., 30)
+- Add broader interests (e.g., "tech, software, web")
+- Check that OpenAI is actually scoring items (view Convex logs)
+
+### Duplicate Items Across Runs
+
+**Expected behavior:** The system doesn't deduplicate by URL. If an HN post stays on the front page for days, it will match multiple times.
+
+**Workaround:** Implement deduplication logic in the Convex action.
+
+## Related Commands
+
+- [life-hunter setup](/commands/setup) — Configure your profile first
+- [life-hunter daily](/commands/daily) — View today's digest and send email
+
+## Source Code Reference
+
+Implemented in `src/commands/hunt.ts:23-142`

@@ -1,0 +1,415 @@
+---
+title: 'Building Custom Agents'
+description: 'Create your own scraping agents to extend Agentic Life Hunter'
+icon: 'robot'
+---
+
+## Overview
+
+Agentic Life Hunter's architecture makes it easy to add new data sources. Each **agent** is a Convex action that:
+
+1. Fetches data from an external API or website
+2. Normalizes it into a standard `RawItem` format
+3. Returns an array of items for AI scoring
+
+<Note>
+Agents run in **parallel** during `life-hunter hunt` and are orchestrated by the `runAllAgents` action in `convex/agents.ts`.
+</Note>
+
+---
+
+## Agent Interface
+
+All agents must return an array of `RawItem` objects:
+
+```typescript convex/agents.ts
+interface RawItem {
+  title: string;       // Item headline or name
+  url: string;         // Link to the original resource
+  content?: string;    // Optional description or excerpt
+  source: string;      // Source identifier (e.g., "GitHub Jobs")
+}
+```
+
+This interface is defined in `convex/agents.ts:12-17` and used by all built-in scrapers.
+
+---
+
+## Step-by-Step: GitHub Jobs Agent
+
+Let's build a custom agent that scrapes job postings from GitHub's public API.
+
+### 1. Create the Agent Action
+
+Add this to `convex/agents.ts`:
+
+```typescript
+/** Scrape GitHub Jobs — latest postings. */
+export const scrapeGitHubJobs = action({
+  args: {},
+  handler: async (): Promise<RawItem[]> => {
+    const items: RawItem[] = [];
+
+    try {
+      // GitHub Jobs API (fictional endpoint for this example)
+      const res = await fetch(
+        "https://api.github.com/search/issues?q=label:jobs+type:issue&sort=created&order=desc&per_page=20"
+      );
+
+      if (!res.ok) {
+        console.warn(`[GitHub Jobs Agent] returned ${res.status}`);
+        return items;
+      }
+
+      const data = (await res.json()) as {
+        items: Array<{
+          title: string;
+          html_url: string;
+          body?: string;
+          repository_url?: string;
+        }>;
+      };
+
+      for (const issue of data.items || []) {
+        items.push({
+          title: issue.title,
+          url: issue.html_url,
+          content: issue.body?.slice(0, 500), // First 500 chars
+          source: "GitHub Jobs",
+        });
+      }
+    } catch (err) {
+      console.error("[GitHub Jobs Agent] Error:", err);
+    }
+
+    return items;
+  },
+});
+```
+
+<Warning>
+Always wrap API calls in `try-catch` blocks. Agent failures should not crash the entire orchestrator.
+</Warning>
+
+---
+
+### 2. Add to the Orchestrator
+
+Update the `runAllAgents` action (convex/agents.ts:409-509) to include your new agent:
+
+```typescript
+export const runAllAgents = action({
+  args: {
+    profileId: v.id("profiles"),
+    sources: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    const profile = await ctx.runQuery(api.profiles.get, { id: args.profileId });
+    const enabledSources = args.sources || profile.sources;
+
+    // Start a run log
+    const runId = await ctx.runMutation(api.items.startRun, {
+      profileId: args.profileId,
+      sources: enabledSources,
+    });
+
+    // Fire all scrapers in parallel
+    const scraperPromises: Promise<RawItem[]>[] = [];
+
+    if (enabledSources.includes("Hacker News")) {
+      scraperPromises.push(ctx.runAction(api.agents.scrapeHackerNews, {}));
+    }
+    if (enabledSources.includes("Product Hunt")) {
+      scraperPromises.push(ctx.runAction(api.agents.scrapeProductHunt, {}));
+    }
+    if (enabledSources.includes("Reddit")) {
+      scraperPromises.push(ctx.runAction(api.agents.scrapeReddit, {}));
+    }
+    if (enabledSources.includes("Craigslist")) {
+      scraperPromises.push(ctx.runAction(api.agents.scrapeCraigslist, {}));
+    }
+    
+    // ✅ Add your custom agent here
+    if (enabledSources.includes("GitHub Jobs")) {
+      scraperPromises.push(ctx.runAction(api.agents.scrapeGitHubJobs, {}));
+    }
+
+    const results = await Promise.allSettled(scraperPromises);
+
+    // ... rest of orchestrator logic
+  },
+});
+```
+
+---
+
+### 3. Update the Setup Command
+
+Modify `src/commands/setup.ts` to include "GitHub Jobs" in the source selection prompt:
+
+```typescript
+{
+  type: "checkbox",
+  name: "sources",
+  message: chalk.cyan("📡 Select your sources:"),
+  choices: [
+    { name: "Hacker News", checked: true },
+    { name: "Product Hunt", checked: true },
+    { name: "Reddit", checked: true },
+    { name: "Craigslist", checked: false },
+    { name: "GitHub Jobs", checked: true }, // ✅ Add here
+  ],
+}
+```
+
+---
+
+## Real-World Agent Examples
+
+Here are the key patterns from existing agents:
+
+### Pattern 1: REST API with JSON Response
+
+```typescript
+export const scrapeHackerNews = action({
+  args: {},
+  handler: async (): Promise<RawItem[]> => {
+    const items: RawItem[] = [];
+    
+    const res = await fetch(
+      "https://hacker-news.firebaseio.com/v0/topstories.json"
+    );
+    const topIds = (await res.json()) as number[];
+
+    const stories = await Promise.all(
+      topIds.slice(0, 15).map(async (id) => {
+        const res = await fetch(
+          `https://hacker-news.firebaseio.com/v0/item/${id}.json`
+        );
+        return res.json() as Promise<{ title?: string; url?: string; id: number }>;
+      })
+    );
+
+    for (const s of stories) {
+      if (s?.title) {
+        items.push({
+          title: s.title,
+          url: s.url || `https://news.ycombinator.com/item?id=${s.id}`,
+          source: "Hacker News",
+        });
+      }
+    }
+
+    return items;
+  },
+});
+```
+
+### Pattern 2: GraphQL API
+
+```typescript
+export const scrapeProductHunt = action({
+  args: {},
+  handler: async (): Promise<RawItem[]> => {
+    const items: RawItem[] = [];
+
+    const res = await fetch("https://www.producthunt.com/frontend/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        query: `{
+          posts(first: 15) {
+            edges {
+              node {
+                name
+                tagline
+                url
+                website
+              }
+            }
+          }
+        }`,
+      }),
+    });
+
+    const data = await res.json();
+    for (const edge of data?.data?.posts?.edges || []) {
+      const p = edge.node;
+      items.push({
+        title: `${p.name} — ${p.tagline}`,
+        url: p.website || p.url,
+        content: p.tagline,
+        source: "Product Hunt",
+      });
+    }
+
+    return items;
+  },
+});
+```
+
+### Pattern 3: RSS/XML Parsing
+
+```typescript
+export const scrapeCraigslist = action({
+  args: { region: v.optional(v.string()) },
+  handler: async (_ctx, args): Promise<RawItem[]> => {
+    const region = args.region || "sfbay";
+    const items: RawItem[] = [];
+
+    const url = `https://${region}.craigslist.org/search/sof?format=rss`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "LifeHunterCLI/1.0" },
+    });
+
+    const text = await res.text();
+
+    // Parse RSS XML manually (no DOM in Convex)
+    const titleRegex = /<title><!\[CDATA\[(.*?)\]\]><\/title>/g;
+    const linkRegex = /<link>(https:\/\/[^<]+)<\/link>/g;
+
+    const titles: string[] = [];
+    const links: string[] = [];
+
+    let m;
+    while ((m = titleRegex.exec(text)) !== null) titles.push(m[1]);
+    while ((m = linkRegex.exec(text)) !== null) links.push(m[1]);
+
+    for (let i = 1; i < Math.min(titles.length, links.length); i++) {
+      items.push({
+        title: titles[i],
+        url: links[i],
+        source: `Craigslist ${region}`,
+      });
+    }
+
+    return items;
+  },
+});
+```
+
+---
+
+## Testing Your Agent
+
+### Manual Testing
+
+1. **Deploy to Convex:**
+   ```bash
+   npx convex dev
+   ```
+
+2. **Test via Convex Dashboard:**
+   - Open https://dashboard.convex.dev
+   - Navigate to your project → Functions
+   - Find your agent action (e.g., `agents:scrapeGitHubJobs`)
+   - Click "Run" and inspect the output
+
+3. **Test via CLI:**
+   ```bash
+   life-hunter hunt
+   ```
+   - Select a profile that has "GitHub Jobs" enabled
+   - Check terminal output for scraped items
+
+---
+
+## Best Practices
+
+<Steps>
+  <Step title="Rate Limiting">
+    Add delays between requests if the API has strict rate limits:
+    
+    ```typescript
+    await new Promise(resolve => setTimeout(resolve, 1000)); // 1s delay
+    ```
+  </Step>
+
+  <Step title="Error Handling">
+    Always catch errors and log them — don't let one agent crash the entire orchestrator:
+    
+    ```typescript
+    try {
+      // scraping logic
+    } catch (err) {
+      console.error("[Agent Name] Error:", err);
+      return []; // Return empty array on failure
+    }
+    ```
+  </Step>
+
+  <Step title="Content Truncation">
+    Limit content size to avoid exceeding database limits:
+    
+    ```typescript
+    content: item.body?.slice(0, 500) || undefined
+    ```
+  </Step>
+
+  <Step title="User-Agent Headers">
+    Some sites block requests without a User-Agent header:
+    
+    ```typescript
+    headers: { "User-Agent": "LifeHunterCLI/1.0" }
+    ```
+  </Step>
+
+  <Step title="Deduplication">
+    The system automatically deduplicates by URL, but ensure your agent returns unique URLs.
+  </Step>
+</Steps>
+
+---
+
+## Advanced: Parameterized Agents
+
+You can add arguments to your agent for dynamic behavior:
+
+```typescript
+export const scrapeReddit = action({
+  args: {
+    subreddits: v.optional(v.array(v.string())),
+  },
+  handler: async (_ctx, args): Promise<RawItem[]> => {
+    const subs = args.subreddits || ["programming", "webdev"];
+    const items: RawItem[] = [];
+
+    for (const sub of subs) {
+      const res = await fetch(
+        `https://www.reddit.com/r/${sub}/hot.json?limit=10`,
+        { headers: { "User-Agent": "LifeHunterCLI/1.0" } }
+      );
+      const data = await res.json();
+      // ... parse and push items
+    }
+
+    return items;
+  },
+});
+```
+
+Call it with custom arguments in the orchestrator:
+
+```typescript
+scraperPromises.push(
+  ctx.runAction(api.agents.scrapeReddit, {
+    subreddits: ["MachineLearning", "reactjs"],
+  })
+);
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Convex Schema" icon="database" href="/advanced/convex-schema">
+    Understand the database structure
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/advanced/troubleshooting">
+    Debug agent failures and API errors
+  </Card>
+</CardGroup>

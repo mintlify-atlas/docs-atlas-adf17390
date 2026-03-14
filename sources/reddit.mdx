@@ -1,0 +1,271 @@
+---
+title: "Reddit Agent"
+description: "Scrapes hot posts from programming, job, and tech subreddits"
+---
+
+## Overview
+
+The Reddit agent scrapes hot posts from multiple tech and job-focused subreddits. It's ideal for:
+
+- Finding freelance opportunities on r/forhire
+- Discovering side project ideas on r/SideProject
+- Staying current with r/programming and r/webdev
+- Tracking AI/ML trends on r/MachineLearning
+- Following startup discussions on r/startups
+
+The agent fetches **10 hot posts per subreddit** (60 total by default).
+
+## Implementation
+
+The agent is implemented as a Convex action in `convex/agents.ts:170-234`.
+
+### Default Subreddits
+
+```typescript
+const subs = args.subreddits || [
+  "programming",
+  "webdev",
+  "MachineLearning",
+  "startups",
+  "SideProject",
+  "forhire",
+];
+```
+
+### API Endpoint
+
+The agent uses Reddit's public JSON API:
+
+```typescript
+const res = await fetch(
+  `https://www.reddit.com/r/${sub}/hot.json?limit=10`,
+  {
+    headers: {
+      "User-Agent": "LifeHunterCLI/1.0",
+    },
+  }
+);
+```
+
+<Note>
+  Reddit requires a `User-Agent` header. The agent identifies itself as `LifeHunterCLI/1.0`.
+</Note>
+
+## Data Fetching Process
+
+<Steps>
+  <Step title="Iterate Through Subreddits">
+    Loops through each subreddit sequentially:
+    
+    ```typescript
+    for (const sub of subs) {
+      try {
+        const res = await fetch(
+          `https://www.reddit.com/r/${sub}/hot.json?limit=10`,
+          { headers: { "User-Agent": "LifeHunterCLI/1.0" } }
+        );
+        // Process response
+      } catch (err) {
+        console.error(`[Reddit Agent] r/${sub} Error:`, err);
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Parse JSON Response">
+    Extracts post data from the Reddit JSON structure:
+    
+    ```typescript
+    const data = await res.json();
+    
+    for (const child of data.data.children) {
+      const post = child.data;
+      items.push({
+        title: post.title,
+        url: post.url.startsWith("http")
+          ? post.url
+          : `https://reddit.com${post.permalink}`,
+        content: post.selftext?.slice(0, 500) || undefined,
+        source: `Reddit r/${sub}`,
+      });
+    }
+    ```
+  </Step>
+  
+  <Step title="Handle Errors Gracefully">
+    Continues scraping other subreddits if one fails:
+    
+    ```typescript
+    if (!res.ok) {
+      console.warn(`[Reddit Agent] r/${sub} returned ${res.status}`);
+      continue; // Skip to next subreddit
+    }
+    ```
+  </Step>
+</Steps>
+
+## Data Structure
+
+### Input: Reddit JSON Response
+
+```json
+{
+  "data": {
+    "children": [
+      {
+        "data": {
+          "title": "Show r/programming: I built an AI CLI tool",
+          "url": "https://github.com/user/project",
+          "selftext": "Here's my project description...",
+          "permalink": "/r/programming/comments/abc123/...",
+          "link_flair_text": "Project"
+        }
+      }
+    ]
+  }
+}
+```
+
+### Output: Normalized RawItem
+
+```typescript
+interface RawItem {
+  title: string;        // Post title
+  url: string;          // External link or Reddit permalink
+  content?: string;     // Self-post text (first 500 chars)
+  source: string;       // "Reddit r/programming"
+}
+```
+
+## Example Items
+
+<CodeGroup>
+
+```json r/programming
+{
+  "title": "Show r/programming: AI-powered CLI for developers",
+  "url": "https://github.com/user/life-hunter-cli",
+  "content": "I built a CLI that uses AI to scrape and match job opportunities...",
+  "source": "Reddit r/programming"
+}
+```
+
+```json r/forhire
+{
+  "title": "[Hiring] Senior TypeScript Developer (Remote, $120k-$150k)",
+  "url": "https://reddit.com/r/forhire/comments/xyz789/...",
+  "content": "We're looking for an experienced TypeScript developer to join our team...",
+  "source": "Reddit r/forhire"
+}
+```
+
+```json r/MachineLearning
+{
+  "title": "[Research] New paper on transformer optimization",
+  "url": "https://arxiv.org/abs/2024.12345",
+  "source": "Reddit r/MachineLearning"
+}
+```
+
+</CodeGroup>
+
+## Performance
+
+- **Typical execution time:** 3-6 seconds (sequential fetches)
+- **Items returned:** ~60 (10 per subreddit × 6 subreddits)
+- **Rate limits:** Reddit allows ~60 requests/minute per IP
+- **Concurrent requests:** Sequential (to avoid rate limiting)
+
+<Warning>
+  The agent fetches subreddits sequentially to avoid hitting Reddit's rate limits. Fetching 6 subreddits takes 3-6 seconds.
+</Warning>
+
+## Customization
+
+You can customize the subreddit list by passing the `subreddits` argument:
+
+```typescript
+// In convex/agents.ts orchestrator
+if (enabledSources.includes("Reddit")) {
+  scraperPromises.push(
+    ctx.runAction(api.agents.scrapeReddit, {
+      subreddits: ["rust", "golang", "javascript", "cscareerquestions"]
+    })
+  );
+}
+```
+
+### Popular Tech Subreddits
+
+| Subreddit | Focus | Avg Posts/Day |
+|-----------|-------|---------------|
+| `programming` | General programming | ~50 |
+| `webdev` | Web development | ~40 |
+| `MachineLearning` | AI/ML research | ~30 |
+| `forhire` | Job postings | ~20 |
+| `SideProject` | Indie projects | ~15 |
+| `startups` | Startup discussions | ~25 |
+| `cscareerquestions` | Career advice | ~100 |
+| `learnprogramming` | Beginner Q&A | ~80 |
+
+<Tip>
+  For job hunting, focus on `forhire`, `cscareerquestions`, and niche language subreddits like `reactjs` or `python`.
+</Tip>
+
+## Error Handling
+
+The agent handles errors gracefully:
+
+```typescript
+for (const sub of subs) {
+  try {
+    const res = await fetch(`https://www.reddit.com/r/${sub}/hot.json?limit=10`, {
+      headers: { "User-Agent": "LifeHunterCLI/1.0" },
+    });
+    
+    if (!res.ok) {
+      console.warn(`[Reddit Agent] r/${sub} returned ${res.status}`);
+      continue; // Skip to next subreddit
+    }
+    
+    // Process posts
+  } catch (err) {
+    console.error(`[Reddit Agent] r/${sub} Error:`, err);
+  }
+}
+
+return items; // Returns partial results even if some subreddits fail
+```
+
+Common issues:
+- **Rate limiting (429):** Reduce subreddit count or add delays
+- **Private/banned subreddits (403):** Skipped automatically
+- **Invalid subreddit names:** Returns no items
+
+## AI Scoring Patterns
+
+Reddit items are typically scored as:
+- **Job** (90-100) — r/forhire posts, hiring threads
+- **Research** (70-90) — r/programming discussions, r/MachineLearning papers
+- **Deal** (50-70) — Product launches, affiliate links
+
+<Note>
+  The AI considers the subreddit name (e.g., "forhire" boosts job scores) and post flair (e.g., "[Hiring]" in title).
+</Note>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Running Agents" icon="play" href="/guides/running-agents">
+    Learn how all agents work together
+  </Card>
+  <Card title="AI Scoring" icon="brain" href="/architecture/ai-scoring">
+    Understand how Reddit items are scored
+  </Card>
+  <Card title="Custom Agents" icon="code" href="/advanced/custom-agents">
+    Build your own scraping agents
+  </Card>
+  <Card title="Hunt Command" icon="terminal" href="/commands/hunt">
+    Run the hunt command
+  </Card>
+</CardGroup>

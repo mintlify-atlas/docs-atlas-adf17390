@@ -1,80 +1,419 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Complete end-to-end tutorial from installation to your first hunt
 ---
 
-## Get started in three steps
+<Note>
+  **Prerequisites**: Ensure you've completed the [installation](/installation) steps, including Convex setup and environment configuration.
+</Note>
 
-Get your documentation site running locally and make your first customization.
+## Overview
 
-### Step 1: Set up your local environment
+This guide will walk you through:
+
+1. Installing Life Hunter CLI
+2. Setting up your Convex project
+3. Configuring environment variables
+4. Creating your profile with `life-hunter setup`
+5. Running your first hunt with `life-hunter hunt`
+6. (Optional) Sending an email digest with `life-hunter daily`
+
+Let's get started!
+
+## Step 1: Install Dependencies
+
+<Steps>
+  <Step title="Install Life Hunter Globally">
+    <CodeGroup>
+    ```bash npm
+    npm install -g life-hunter-cli
+    ```
+    
+    ```bash yarn
+    yarn global add life-hunter-cli
+    ```
+    
+    ```bash pnpm
+    pnpm add -g life-hunter-cli
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Verify Installation">
+    ```bash
+    life-hunter --version
+    # Output: 1.0.0
+    ```
+  </Step>
+</Steps>
+
+## Step 2: Set Up Convex Project
+
+<Steps>
+  <Step title="Initialize Convex Development Server">
+    ```bash
+    npx convex dev
+    ```
+    
+    <Info>
+      This command will guide you through creating a Convex account and project if you don't have one.
+    </Info>
+  </Step>
+  
+  <Step title="Authenticate with Convex">
+    Follow the prompts to:
+    
+    - Sign in with GitHub or create a new account
+    - Create a new project (e.g., "life-hunter")
+    - Wait for schema deployment
+    
+    Example output:
+    ```bash
+    ✔ Authenticated as user@example.com
+    ✔ Created project: life-hunter
+    ✔ Deploying schema...
+    ✔ Deployment complete!
+    
+    Deployment URL: https://noble-peacock-123.convex.cloud
+    ```
+  </Step>
+  
+  <Step title="Copy Your Deployment URL">
+    Save the `Deployment URL` from the output — you'll need it next.
+  </Step>
+</Steps>
+
+## Step 3: Configure Environment Variables
+
+<Steps>
+  <Step title="Create .env File">
+    Create a `.env` file in your home directory or project root:
+    
+    ```bash
+    touch .env
+    ```
+  </Step>
+  
+  <Step title="Add Convex URL">
+    Edit `.env` and add your Convex deployment URL:
+    
+    ```bash .env
+    CONVEX_URL=https://noble-peacock-123.convex.cloud
+    ```
+  </Step>
+  
+  <Step title="Add OpenAI API Key (Recommended)">
+    For AI-powered matching, add your [OpenAI API key](https://platform.openai.com/api-keys):
+    
+    ```bash .env
+    CONVEX_URL=https://noble-peacock-123.convex.cloud
+    OPENAI_API_KEY=sk-proj-your-key-here
+    ```
+    
+    <Warning>
+      Without an OpenAI key, Life Hunter falls back to keyword matching, which is less accurate.
+    </Warning>
+  </Step>
+  
+  <Step title="(Optional) Configure Email Settings">
+    For daily email digests:
+    
+    ```bash .env
+    SMTP_HOST=smtp.gmail.com
+    SMTP_PORT=587
+    SMTP_USER=your-email@gmail.com
+    SMTP_PASS=your-app-password
+    EMAIL_FROM=Agentic Life Hunter <your-email@gmail.com>
+    ```
+  </Step>
+</Steps>
+
+## Step 4: Configure Your Profile
+
+Run the interactive profile setup:
+
+```bash
+life-hunter setup
+```
+
+You'll see a beautiful ASCII banner followed by prompts:
+
+```
+  ██╗     ██╗███████╗███████╗    ██╗  ██╗██╗   ██╗███╗   ██╗████████╗███████╗██████╗
+  ██║     ██║██╔════╝██╔════╝    ██║  ██║██║   ██║████╗  ██║╚══██╔══╝██╔════╝██╔══██╗
+  ██║     ██║█████╗  █████╗      ███████║██║   ██║██╔██╗ ██║   ██║   █████╗  ██████╔╝
+  ██║     ██║██╔══╝  ██╔══╝      ██╔══██║██║   ██║██║╚██╗██║   ██║   ██╔══╝  ██╔══██╗
+  ███████╗██║██║     ███████╗    ██║  ██║╚██████╔╝██║ ╚████║   ██║   ███████╗██║  ██║
+  ╚══════╝╚═╝╚═╝     ╚══════╝    ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
+
+╭──────────────────────────────────────────────────────────╮
+│  🧬 AI-Powered Opportunity Hunter                        │
+│  Scrape → Match → Discover — all from your terminal     │
+╰──────────────────────────────────────────────────────────╯
+
+  🧬 Profile Setup
+  ─────────────────────────────────────
+  Configure your profile so the AI agents know what to hunt for.
+
+? Your name: Alex Johnson
+? Email address: alex@example.com
+? Your skills (comma-separated): TypeScript, React, Node.js, Python
+? Your interests (comma-separated): AI, startups, open source, web3
+? Select sources to hunt: (Press <space> to select, <a> to toggle all)
+ ◉ Hacker News
+ ◉ Product Hunt
+ ◉ Reddit
+ ◉ Craigslist
+? Min AI match score (0-100): 40
+```
+
+### Profile Configuration Explained
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+  <Accordion title="Name & Email">
+    Used for personalization and email digests. Your name appears in email headers, and the email address is where digests are sent.
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+  
+  <Accordion title="Skills">
+    Technical skills you possess (e.g., TypeScript, React, Python, Machine Learning). These are used to match job postings and technical discussions.
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+    **Examples**:
+    - `TypeScript, React, Node.js, PostgreSQL`
+    - `Python, TensorFlow, PyTorch, Data Science`
+    - `Rust, WebAssembly, Systems Programming`
+  </Accordion>
+  
+  <Accordion title="Interests">
+    Topics you care about beyond your skills (e.g., AI, startups, crypto, DevOps). These help match broader opportunities and content.
+    
+    **Examples**:
+    - `AI, startups, open source, web3`
+    - `Climate tech, sustainability, renewable energy`
+    - `Gaming, VR, metaverse, Unity`
+  </Accordion>
+  
+  <Accordion title="Sources">
+    Which platforms to scrape. You can enable/disable sources based on your preferences:
+    
+    - **Hacker News**: Top stories + "Who's Hiring" threads
+    - **Product Hunt**: Trending products and launches
+    - **Reddit**: r/programming, r/webdev, r/MachineLearning, r/forhire, r/startups, r/SideProject
+    - **Craigslist**: Software jobs in SF Bay Area
+  </Accordion>
+  
+  <Accordion title="Score Threshold">
+    Minimum AI match score (0-100) to display. Lower thresholds show more items (potentially less relevant), higher thresholds are more selective.
+    
+    **Recommendations**:
+    - `30-40`: Broad discovery, lots of results
+    - `50-60`: Balanced relevance
+    - `70+`: Only highly relevant matches
   </Accordion>
 </AccordionGroup>
 
-### Step 2: Deploy your changes
+### Example Setup Output
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+```bash
+⠋ Saving profile to Convex...
+✔ Profile saved! ID: j574h3k9qr8m2n1p0v8w7x6y5z4a3b2c
+ℹ Skills: TypeScript, React, Node.js, Python
+ℹ Interests: AI, startups, open source, web3
+ℹ Sources: Hacker News, Product Hunt, Reddit, Craigslist
+ℹ Threshold: 40
+
+  Run life-hunter hunt to start finding opportunities!
+```
+
+<Check>
+  **Profile configured!** You're ready to hunt.
+</Check>
+
+## Step 5: Run Your First Hunt
+
+Deploy the AI agents and start discovering opportunities:
+
+```bash
+life-hunter hunt
+```
+
+### What Happens During a Hunt
+
+<Steps>
+  <Step title="Profile Loading">
+    Life Hunter loads your profile from Convex:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```
+    ⠋ Loading profiles...
+    ℹ Using profile: Alex Johnson (alex@example.com)
+    ```
+  </Step>
+  
+  <Step title="Agent Deployment">
+    All enabled agents scrape their sources in parallel:
+    
+    ```
+    ⠋ Deploying agents... scraping HN, Product Hunt, Reddit, Craigslist
+    ```
+    
+    Behind the scenes:
+    - **Hacker News Agent**: Fetches top 15 stories + "Who's Hiring" threads
+    - **Product Hunt Agent**: Gets today's trending products via GraphQL API
+    - **Reddit Agent**: Scrapes hot posts from r/programming, r/webdev, r/forhire, etc.
+    - **Craigslist Agent**: Parses RSS feeds for software jobs in SF Bay Area
+  </Step>
+  
+  <Step title="AI Scoring">
+    Each item is scored by OpenAI GPT-4o-mini:
+    
+    ```typescript
+    // The AI prompt sent to OpenAI
+    {
+      "item": {
+        "title": "Show HN: AI-powered code review assistant",
+        "source": "Hacker News"
+      },
+      "profile": {
+        "skills": ["TypeScript", "React", "Node.js", "Python"],
+        "interests": ["AI", "startups", "open source", "web3"]
+      }
+    }
+    
+    // AI response
+    {
+      "score": 85,
+      "type": "research",
+      "summary": "Highly relevant - combines AI and open source development"
+    }
+    ```
+  </Step>
+  
+  <Step title="Results Display">
+    Matched items are displayed in a beautiful table:
+    
+    ```
+    ℹ Scraped 127 items → 23 matched your profile
+    ⠋ Fetching matched items...
+    ```
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+### Example Hunt Output
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+```
+┌─────┬──────────────┬──────────────────────┬─────────────────────────────────────────────────────────┬────────┐
+│ #   │ Type         │ Source               │ Title                                                   │ Score  │
+├─────┼──────────────┼──────────────────────┼─────────────────────────────────────────────────────────┼────────┤
+│ 1   │ 🔬 research  │ Hacker News          │ Show HN: AI-powered code review assistant               │ 85     │
+│ 2   │ 💼 job       │ HN Who's Hiring      │ Startup hiring React/TypeScript engineers (remote)      │ 82     │
+│ 3   │ 🏷️  deal     │ Product Hunt         │ CodeMate — AI pair programmer for VSCode                │ 78     │
+│ 4   │ 🔬 research  │ Reddit r/programming │ New TypeScript 5.4 features are amazing                 │ 71     │
+│ 5   │ 💼 job       │ Reddit r/forhire     │ [Hiring] Full-stack dev for AI startup (equity)         │ 69     │
+│ 6   │ 🔬 research  │ Hacker News          │ Web3 authentication without wallets                     │ 65     │
+│ 7   │ 💼 job       │ Craigslist sfbay     │ Senior Node.js Developer - SF - $150k-$200k             │ 63     │
+│ 8   │ 🔬 research  │ Reddit r/webdev      │ Best practices for React Server Components              │ 58     │
+│ 9   │ 🏷️  deal     │ Product Hunt         │ OpenSource AI — GPT-4 alternative, 100% free            │ 56     │
+│ 10  │ 🔬 research  │ Hacker News          │ How we built our startup's tech stack                   │ 52     │
+└─────┴──────────────┴──────────────────────┴─────────────────────────────────────────────────────────┴────────┘
 
-### Step 3: Go live
+╭──────────────────────────────────────────────────────────╮
+│  ━━━ Hunt Summary ━━━                                    │
+│                                                          │
+│    Total items:  23                                      │
+│    Avg score:    67                                      │
+│    Top score:    85                                      │
+│    Time:         8.3s                                    │
+│                                                          │
+│    By Source:                                            │
+│      Hacker News: 8                                      │
+│      Product Hunt: 5                                     │
+│      Reddit r/programming: 4                             │
+│      Reddit r/forhire: 3                                 │
+│      Craigslist sfbay: 3                                 │
+│                                                          │
+│    By Type:                                              │
+│      🔬 research: 12                                     │
+│      💼 job: 8                                           │
+│      🏷️  deal: 3                                        │
+╰──────────────────────────────────────────────────────────╯
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+  Run life-hunter daily to get this as an email digest.
+```
 
-## Next steps
+<Tip>
+  Items are automatically deduplicated by URL, so you won't see the same opportunity twice across multiple hunts.
+</Tip>
 
-Now that you have your docs running, explore these key features:
+## Step 6: Send Email Digest (Optional)
 
-<CardGroup cols={2}>
+If you've configured SMTP settings, send today's matches to your email:
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+```bash
+life-hunter daily
+```
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+This command:
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+1. Fetches all items matched today
+2. Generates a styled HTML email
+3. Prompts you to confirm sending
+4. Delivers the digest to your inbox
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Email digests include the same information as the terminal output, but formatted beautifully for email clients.
 </Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Commands Reference" icon="terminal" href="/commands/setup">
+    Detailed documentation for all CLI commands
+  </Card>
+  
+  <Card title="Configuration Guide" icon="gear" href="/guides/configuration">
+    Advanced configuration options and customization
+  </Card>
+  
+  <Card title="Convex Backend" icon="database" href="/architecture/convex-backend">
+    Understand the Convex backend architecture
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/advanced/troubleshooting">
+    Solutions to common issues and errors
+  </Card>
+</CardGroup>
+
+## Tips for Best Results
+
+<AccordionGroup>
+  <Accordion title="Be Specific with Skills">
+    Instead of generic terms like "programming", use specific technologies:
+    
+    ❌ `programming, web development, databases`  
+    ✅ `TypeScript, React, PostgreSQL, GraphQL`
+  </Accordion>
+  
+  <Accordion title="Balance Your Threshold">
+    Start with a threshold around 40-50, then adjust based on results:
+    
+    - **Too many results?** Increase to 60-70
+    - **Too few results?** Decrease to 30-40
+    - **Only want home runs?** Set to 80+
+  </Accordion>
+  
+  <Accordion title="Run Hunts Regularly">
+    Set up a daily cron job to automatically hunt and email results:
+    
+    ```bash
+    # Add to crontab (crontab -e)
+    0 9 * * * cd /path/to/life-hunter-cli && life-hunter hunt && life-hunter daily
+    ```
+  </Accordion>
+  
+  <Accordion title="Update Your Profile">
+    As your interests evolve, re-run `life-hunter setup` to create an updated profile.
+  </Accordion>
+</AccordionGroup>
+
+<Check>
+  **Congratulations!** You've completed your first hunt. Life Hunter is now working for you. 🎉
+</Check>

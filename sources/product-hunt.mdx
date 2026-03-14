@@ -1,0 +1,266 @@
+---
+title: "Product Hunt Agent"
+description: "Scrapes today's trending products from Product Hunt"
+---
+
+## Overview
+
+The Product Hunt agent scrapes the daily list of trending products, launches, and tools from Product Hunt. It's ideal for:
+
+- Discovering new AI tools and SaaS products
+- Tracking competitor launches
+- Finding deals and beta opportunities
+- Staying current with product trends
+
+The agent fetches **15 top products** from today's front page.
+
+## Implementation
+
+The agent is implemented as a Convex action in `convex/agents.ts:88-167`.
+
+### Primary Method: GraphQL API
+
+The agent first attempts to use Product Hunt's GraphQL endpoint:
+
+```typescript
+const res = await fetch("https://www.producthunt.com/frontend/graphql", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  },
+  body: JSON.stringify({
+    query: `{
+      posts(first: 15) {
+        edges {
+          node {
+            name
+            tagline
+            url
+            website
+          }
+        }
+      }
+    }`,
+  }),
+});
+```
+
+### Fallback Method: HTML Scraping
+
+If the GraphQL API fails, the agent falls back to HTML scraping:
+
+```typescript
+const htmlRes = await fetch("https://www.producthunt.com/");
+const html = await htmlRes.text();
+
+// Extract product names via regex
+const titleRegex = /data-test="post-name"[^>]*>([^<]+)/g;
+let match;
+let count = 0;
+while ((match = titleRegex.exec(html)) !== null && count < 15) {
+  items.push({
+    title: match[1].trim(),
+    url: "https://www.producthunt.com",
+    source: "Product Hunt",
+  });
+  count++;
+}
+```
+
+## Data Fetching Process
+
+<Steps>
+  <Step title="Attempt GraphQL Query">
+    Sends a POST request to the GraphQL endpoint requesting product details:
+    
+    ```graphql
+    query {
+      posts(first: 15) {
+        edges {
+          node {
+            name
+            tagline
+            url
+            website
+          }
+        }
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Parse GraphQL Response">
+    Extracts product data and normalizes to `RawItem` format:
+    
+    ```typescript
+    for (const edge of data?.data?.posts?.edges || []) {
+      const p = edge.node;
+      items.push({
+        title: `${p.name} — ${p.tagline}`,
+        url: p.website || p.url,
+        content: p.tagline,
+        source: "Product Hunt",
+      });
+    }
+    ```
+  </Step>
+  
+  <Step title="Fallback to HTML (if needed)">
+    If GraphQL fails, scrapes the homepage HTML using regex:
+    
+    ```typescript
+    const titleRegex = /data-test="post-name"[^>]*>([^<]+)/g;
+    while ((match = titleRegex.exec(html)) !== null && count < 15) {
+      items.push({
+        title: match[1].trim(),
+        url: "https://www.producthunt.com",
+        source: "Product Hunt",
+      });
+      count++;
+    }
+    ```
+  </Step>
+</Steps>
+
+## Data Structure
+
+### Input: GraphQL Response
+
+```json
+{
+  "data": {
+    "posts": {
+      "edges": [
+        {
+          "node": {
+            "name": "Life Hunter CLI",
+            "tagline": "AI-powered opportunity hunter for developers",
+            "url": "https://www.producthunt.com/posts/life-hunter-cli",
+            "website": "https://github.com/user/life-hunter-cli"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+### Output: Normalized RawItem
+
+```typescript
+interface RawItem {
+  title: string;        // "Product Name — Tagline"
+  url: string;          // Product website or PH URL
+  content?: string;     // Tagline
+  source: string;       // "Product Hunt"
+}
+```
+
+## Example Items
+
+<CodeGroup>
+
+```json SaaS Product
+{
+  "title": "Notion AI — AI-powered workspace assistant",
+  "url": "https://www.notion.so",
+  "content": "AI-powered workspace assistant",
+  "source": "Product Hunt"
+}
+```
+
+```json Developer Tool
+{
+  "title": "Life Hunter CLI — AI job hunting from the terminal",
+  "url": "https://github.com/user/life-hunter-cli",
+  "content": "AI job hunting from the terminal",
+  "source": "Product Hunt"
+}
+```
+
+```json Chrome Extension
+{
+  "title": "TabOrganizer — Smart tab management for developers",
+  "url": "https://chrome.google.com/webstore/detail/...",
+  "content": "Smart tab management for developers",
+  "source": "Product Hunt"
+}
+```
+
+</CodeGroup>
+
+## Performance
+
+- **Typical execution time:** 1-3 seconds
+- **Items returned:** 15 products
+- **Rate limits:** None officially documented, but GraphQL may throttle
+- **Fallback reliability:** HTML scraping is less reliable (may break with UI changes)
+
+<Warning>
+  The HTML fallback is fragile and may break if Product Hunt changes their HTML structure. The GraphQL API is preferred.
+</Warning>
+
+## Error Handling
+
+The agent handles errors gracefully:
+
+```typescript
+try {
+  // Try GraphQL first
+  if (res.ok) {
+    const data = await res.json();
+    // Parse GraphQL response
+  } else {
+    console.warn("[PH Agent] GraphQL failed, trying HTML fallback...");
+    // Try HTML scraping
+  }
+} catch (err) {
+  console.error("[PH Agent] Error:", err);
+}
+
+return items; // Returns partial results even if some fetches fail
+```
+
+Common issues:
+- **GraphQL rate limiting:** Falls back to HTML
+- **HTML structure changes:** May return fewer or zero items
+- **Network timeouts:** Returns partial results
+
+## AI Scoring Patterns
+
+Product Hunt items are typically scored as:
+- **Deal** (80-100) — New product launches, beta access, lifetime deals
+- **Research** (60-80) — AI tools, developer tools, productivity apps
+- **Job** (40-60) — Hiring platforms, job boards featured on PH
+
+<Tip>
+  If you're interested in AI tools and SaaS products, include "Product Hunt" in your sources and set a threshold of 50+ to catch relevant launches.
+</Tip>
+
+## Customization
+
+The agent currently has no customization options. All parameters are hardcoded:
+- **Number of items:** 15 (GraphQL `first` parameter)
+- **Sort order:** Today's top products (default PH homepage order)
+
+<Note>
+  Future versions could support filtering by topic (AI, developer tools, etc.) or fetching posts from specific dates.
+</Note>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Running Agents" icon="play" href="/guides/running-agents">
+    Learn how all agents work together
+  </Card>
+  <Card title="AI Scoring" icon="brain" href="/architecture/ai-scoring">
+    Understand how PH items are scored
+  </Card>
+  <Card title="Custom Agents" icon="code" href="/advanced/custom-agents">
+    Build your own scraping agents
+  </Card>
+  <Card title="Hunt Command" icon="terminal" href="/commands/hunt">
+    Run the hunt command
+  </Card>
+</CardGroup>

@@ -1,0 +1,459 @@
+---
+title: 'Convex Backend'
+description: 'Database schema, real-time sync, and serverless functions'
+icon: 'database'
+---
+
+## What is Convex?
+
+[Convex](https://convex.dev) is a backend-as-a-service platform that combines:
+- **Real-time Database**: Automatically syncs data to clients
+- **Serverless Functions**: Queries, mutations, and actions
+- **Type Safety**: Auto-generated TypeScript types
+- **Built-in Scheduling**: Cron-like job scheduling
+
+<Note>
+Convex eliminates the need to write traditional backend code. All business logic lives in the `convex/` directory and is deployed automatically.
+</Note>
+
+## Why Convex for a CLI?
+
+While Convex is often used for web apps, it's perfect for CLI tools:
+
+1. **No server management** — Focus on scraping logic, not infrastructure
+2. **Type-safe API** — CLI and backend share generated types
+3. **Real-time updates** — Future feature: live progress during hunts
+4. **Easy deployment** — `npx convex dev` handles everything
+5. **Generous free tier** — 1GB storage, 1M function calls/month
+
+## Database Schema
+
+The schema is defined in `convex/schema.ts` using Convex's declarative API:
+
+<CodeGroup>
+```typescript convex/schema.ts
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  // ─── User Profiles ────────────────────────────────────────────────
+  profiles: defineTable({
+    name: v.string(),
+    email: v.string(),
+    skills: v.array(v.string()),
+    interests: v.array(v.string()),
+    sources: v.array(v.string()),
+    scoreThreshold: v.optional(v.number()), // min AI score to show (default 40)
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  }).index("by_email", ["email"]),
+
+  // ─── Digest Items ─────────────────────────────────────────────────
+  items: defineTable({
+    profileId: v.id("profiles"),
+    type: v.union(
+      v.literal("job"),
+      v.literal("deal"),
+      v.literal("research")
+    ),
+    source: v.string(),       // "Hacker News", "Product Hunt", etc.
+    title: v.string(),
+    url: v.string(),
+    content: v.optional(v.string()),
+    aiSummary: v.optional(v.string()),
+    score: v.number(),        // 0-100 AI match score
+    createdAt: v.number(),
+  })
+    .index("by_profile", ["profileId"])
+    .index("by_profile_and_url", ["profileId", "url"])
+    .index("by_score", ["score"]),
+
+  // ─── Agent Run Logs ───────────────────────────────────────────────
+  runs: defineTable({
+    profileId: v.id("profiles"),
+    status: v.union(
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    sources: v.array(v.string()),
+    totalScraped: v.optional(v.number()),
+    totalMatched: v.optional(v.number()),
+    error: v.optional(v.string()),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  }).index("by_profile", ["profileId"]),
+});
+```
+</CodeGroup>
+
+## Table Definitions
+
+### `profiles` Table
+
+Stores user configuration created during `life-hunter setup`:
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `name` | `string` | User's name for personalization |
+| `email` | `string` | Email for digests (indexed for lookup) |
+| `skills` | `string[]` | Tech skills (e.g., TypeScript, React, Python) |
+| `interests` | `string[]` | Topics of interest (e.g., AI, startups, crypto) |
+| `sources` | `string[]` | Enabled scrapers (HN, Reddit, Product Hunt, Craigslist) |
+| `scoreThreshold` | `number?` | Minimum match score to display (default 40) |
+| `createdAt` | `number` | Unix timestamp |
+| `updatedAt` | `number?` | Unix timestamp of last update |
+
+**Indexes:**
+- `by_email`: Fast profile lookup by email address
+
+### `items` Table
+
+Stores scraped and scored opportunities:
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `profileId` | `Id<"profiles">` | Foreign key to profile |
+| `type` | `"job" \| "deal" \| "research"` | AI-determined item category |
+| `source` | `string` | Origin (e.g., "Hacker News", "Reddit r/programming") |
+| `title` | `string` | Item headline |
+| `url` | `string` | Link to original content |
+| `content` | `string?` | Excerpt or description |
+| `aiSummary` | `string?` | One-sentence AI summary |
+| `score` | `number` | AI match score (0-100) |
+| `createdAt` | `number` | Unix timestamp |
+
+**Indexes:**
+- `by_profile`: Fetch all items for a user
+- `by_profile_and_url`: Deduplication (prevents duplicate URLs per user)
+- `by_score`: Sort/filter by match quality
+
+### `runs` Table
+
+Logs each hunt execution for debugging and analytics:
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `profileId` | `Id<"profiles">` | User who triggered the hunt |
+| `status` | `"running" \| "completed" \| "failed"` | Current state |
+| `sources` | `string[]` | Which agents ran |
+| `totalScraped` | `number?` | Total items found (after deduplication) |
+| `totalMatched` | `number?` | Items above score threshold |
+| `error` | `string?` | Error message if failed |
+| `startedAt` | `number` | Unix timestamp |
+| `completedAt` | `number?` | Unix timestamp |
+
+**Indexes:**
+- `by_profile`: View hunt history per user
+
+## Convex Functions
+
+Convex provides three types of functions:
+
+### Queries (Read-only)
+
+Fast, cacheable data reads:
+
+<CodeGroup>
+```typescript Get Items by Profile
+export const getByProfile = query({
+  args: {
+    profileId: v.id("profiles"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const results = await ctx.db
+      .query("items")
+      .withIndex("by_profile", (q) => q.eq("profileId", args.profileId))
+      .order("desc")
+      .take(args.limit ?? 100);
+
+    // Sort by score descending
+    return results.sort((a, b) => b.score - a.score);
+  },
+});
+```
+
+```typescript Get Today's Digest
+export const getTodaysDigest = query({
+  args: { profileId: v.id("profiles") },
+  handler: async (ctx, args) => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const results = await ctx.db
+      .query("items")
+      .withIndex("by_profile", (q) => q.eq("profileId", args.profileId))
+      .order("desc")
+      .collect();
+
+    return results
+      .filter((item) => item.createdAt >= todayStart.getTime())
+      .sort((a, b) => b.score - a.score);
+  },
+});
+```
+
+```typescript Get Statistics
+export const getStats = query({
+  args: { profileId: v.id("profiles") },
+  handler: async (ctx, args) => {
+    const items = await ctx.db
+      .query("items")
+      .withIndex("by_profile", (q) => q.eq("profileId", args.profileId))
+      .collect();
+
+    const bySource: Record<string, number> = {};
+    const byType: Record<string, number> = {};
+
+    for (const item of items) {
+      bySource[item.source] = (bySource[item.source] || 0) + 1;
+      byType[item.type] = (byType[item.type] || 0) + 1;
+    }
+
+    return {
+      total: items.length,
+      bySource,
+      byType,
+      avgScore: items.length > 0
+        ? Math.round(items.reduce((sum, i) => sum + i.score, 0) / items.length)
+        : 0,
+      topScore: items.length > 0
+        ? Math.max(...items.map((i) => i.score))
+        : 0,
+    };
+  },
+});
+```
+</CodeGroup>
+
+### Mutations (Write operations)
+
+Atomic database writes:
+
+<CodeGroup>
+```typescript Upsert Item with Deduplication
+export const upsertItem = mutation({
+  args: {
+    profileId: v.id("profiles"),
+    type: v.union(v.literal("job"), v.literal("deal"), v.literal("research")),
+    source: v.string(),
+    title: v.string(),
+    url: v.string(),
+    content: v.optional(v.string()),
+    aiSummary: v.optional(v.string()),
+    score: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // Dedupe: check if this URL already exists for this profile
+    const existing = await ctx.db
+      .query("items")
+      .withIndex("by_profile_and_url", (q) =>
+        q.eq("profileId", args.profileId).eq("url", args.url)
+      )
+      .unique();
+
+    if (existing) {
+      // Update score/summary if the new score is higher
+      if (args.score > existing.score) {
+        await ctx.db.patch(existing._id, {
+          score: args.score,
+          aiSummary: args.aiSummary,
+          type: args.type,
+        });
+      }
+      return existing._id;
+    }
+
+    return await ctx.db.insert("items", {
+      ...args,
+      createdAt: Date.now(),
+    });
+  },
+});
+```
+
+```typescript Run Logging
+export const startRun = mutation({
+  args: {
+    profileId: v.id("profiles"),
+    sources: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("runs", {
+      profileId: args.profileId,
+      status: "running",
+      sources: args.sources,
+      startedAt: Date.now(),
+    });
+  },
+});
+
+export const completeRun = mutation({
+  args: {
+    runId: v.id("runs"),
+    totalScraped: v.number(),
+    totalMatched: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.runId, {
+      status: "completed",
+      totalScraped: args.totalScraped,
+      totalMatched: args.totalMatched,
+      completedAt: Date.now(),
+    });
+  },
+});
+```
+</CodeGroup>
+
+### Actions (External API calls)
+
+Actions can make HTTP requests and call other Convex functions. See [AI Scoring](/architecture/ai-scoring) for scraping and scoring actions.
+
+## Deduplication Strategy
+
+### Database-Level Deduplication
+
+The `by_profile_and_url` compound index enables fast duplicate detection:
+
+```typescript
+const existing = await ctx.db
+  .query("items")
+  .withIndex("by_profile_and_url", (q) =>
+    q.eq("profileId", profileId).eq("url", url)
+  )
+  .unique();
+```
+
+<Note>
+The `.unique()` method returns `null` if no match exists, or the single matching document. This is efficient because Convex indexes are automatically maintained.
+</Note>
+
+### Score Update Logic
+
+If a duplicate is found, the system updates only if the new score is higher:
+
+```typescript
+if (existing && args.score > existing.score) {
+  await ctx.db.patch(existing._id, {
+    score: args.score,
+    aiSummary: args.aiSummary,
+    type: args.type,
+  });
+}
+```
+
+**Why update on higher scores?**
+- Items can be rescored with refined prompts
+- Profile changes (new skills/interests) affect relevance
+- AI model improvements yield better matches
+
+## Real-Time Data Synchronization
+
+While the current CLI uses one-off queries, Convex supports reactive subscriptions:
+
+```typescript
+// Future feature: live updates during hunt
+const items = useQuery(api.items.getByProfile, { profileId });
+
+// Automatically re-renders when new items arrive
+```
+
+This enables:
+- **Live progress bars** — Show items as they're scored
+- **Real-time stats** — Update counts during scraping
+- **Collaborative features** — Share hunts with team members
+
+## Error Handling
+
+Convex automatically:
+- **Retries transient failures** — Network errors, rate limits
+- **Validates arguments** — Runtime type checking via Zod
+- **Rolls back mutations** — Atomic transaction semantics
+
+<Warning>
+Actions (like scrapers) do NOT have automatic rollback. Always log errors and update run status to "failed".
+</Warning>
+
+```typescript
+try {
+  // scraping logic
+} catch (err) {
+  await ctx.runMutation(api.items.failRun, {
+    runId,
+    error: String(err),
+  });
+  throw err;
+}
+```
+
+## CLI Integration
+
+The CLI uses the `ConvexHttpClient` singleton:
+
+```typescript
+import { getConvexClient } from "../lib/convex-client.js";
+import { api } from "../../convex/_generated/api.js";
+
+const client = getConvexClient();
+
+// Query
+const profiles = await client.query(api.profiles.list, {});
+
+// Mutation
+const profileId = await client.mutation(api.profiles.upsert, {
+  name: "Alice",
+  email: "alice@example.com",
+  skills: ["TypeScript", "React"],
+  interests: ["AI", "startups"],
+});
+
+// Action
+const result = await client.action(api.agents.runAllAgents, {
+  profileId,
+});
+```
+
+## Deployment
+
+<Steps>
+  <Step title="Initialize Convex">
+    ```bash
+    npx convex dev
+    ```
+    This creates a new project and generates `.env.local` with `CONVEX_URL`.
+  </Step>
+
+  <Step title="Deploy Schema">
+    Schema changes are deployed automatically when you save `convex/schema.ts`.
+  </Step>
+
+  <Step title="Deploy Functions">
+    All functions in `convex/` are hot-reloaded during development and deployed on save.
+  </Step>
+
+  <Step title="Production Deployment">
+    ```bash
+    npx convex deploy --prod
+    ```
+    Generates a production `CONVEX_URL` for your CLI's `.env` file.
+  </Step>
+</Steps>
+
+## Related Pages
+
+<CardGroup cols={2}>
+  <Card title="AI Scoring" icon="brain" href="/architecture/ai-scoring">
+    OpenAI integration and scoring logic
+  </Card>
+  <Card title="System Architecture" icon="diagram-project" href="/architecture/overview">
+    High-level architecture overview
+  </Card>
+  <Card title="Hunt Command" icon="crosshairs" href="/commands/hunt">
+    See the orchestrator in action
+  </Card>
+  <Card title="Convex Docs" icon="external-link" href="https://docs.convex.dev">
+    Official Convex documentation
+  </Card>
+</CardGroup>
