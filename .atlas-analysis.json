@@ -1,0 +1,92 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Agentic Life Hunter CLI",
+  "projectDescription": "AI-powered CLI that scrapes opportunities from HN, Product Hunt, Reddit, and Craigslist, matching them to your skills and interests.",
+  "theme": "aspen",
+  "primaryColor": "#94cb04",
+  "lightColor": "#545454",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/configuration",
+              "guides/profile-setup",
+              "guides/running-agents",
+              "guides/email-digest"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/convex-backend",
+              "architecture/ai-scoring"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Commands",
+            "pages": [
+              "commands/setup",
+              "commands/hunt",
+              "commands/daily"
+            ]
+          },
+          {
+            "group": "Data Sources",
+            "pages": [
+              "sources/hacker-news",
+              "sources/product-hunt",
+              "sources/reddit",
+              "sources/craigslist"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/convex-schema",
+              "advanced/custom-agents",
+              "advanced/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "AI-powered opportunity matching with OpenAI GPT-4o-mini",
+    "Multi-source scraping (Hacker News, Product Hunt, Reddit, Craigslist)",
+    "Personalized profile-based filtering",
+    "Real-time data storage with Convex",
+    "Email digest delivery",
+    "Parallel agent orchestration"
+  ],
+  "publicApiSurface": [
+    "life-hunter setup - Configure user profile with skills and interests",
+    "life-hunter hunt - Deploy scraping agents and find matches",
+    "life-hunter daily - View and email today's digest",
+    "scrapeHackerNews - Convex action to scrape HN stories",
+    "scrapeProductHunt - Convex action to scrape Product Hunt",
+    "scrapeReddit - Convex action to scrape Reddit posts",
+    "scrapeCraigslist - Convex action to scrape Craigslist jobs",
+    "scoreItems - Convex action to AI-score items against profile",
+    "runAllAgents - Convex orchestrator action"
+  ]
+}
